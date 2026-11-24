@@ -14,6 +14,7 @@ import { world, system, BlockPermutation } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 import { CATEGORIES, findQuestion } from "./questions.js";
 import { insidePlayArea } from "./rules.js";
+import * as disguise from "./disguise.js";
 import * as game from "./game.js";
 
 export const BOT_TYPE = "hs:bot";
@@ -142,6 +143,7 @@ function isTracked(entity) {
 export function onEntityLoad(entity) {
   try {
     if (entity.typeId === BOT_TYPE && !isTracked(entity)) entity.remove();
+    else if (entity.hasTag(disguise.DECOY_TAG) && entity.id !== game.state.disguise?.entityId) entity.remove();
   } catch {}
 }
 
@@ -180,6 +182,7 @@ function freshSeeker() {
 export function onTurnStart() {
   const s = game.state;
   removeAllBotEntities();
+  disguise.removeDecoys();
   cmd(dim(), `tickingarea remove ${HIDE_AREA}`);
   s.botHide = null;
   s.searched = [];
@@ -277,14 +280,45 @@ async function planHide(token) {
 
       cmd(d, `tickingarea remove ${HIDE_AREA}`);
       cmd(d, `tickingarea add circle ${spot.x} ${spot.y} ${spot.z} 4 ${HIDE_AREA}`);
-      buildCover(d, spot);
-      game.state.botHide = { x: spot.x + 0.5, y: spot.y, z: spot.z + 0.5, yaw: Math.random() * 360 };
+      const s = game.state;
+      const hide = { x: spot.x + 0.5, y: spot.y, z: spot.z + 0.5, yaw: Math.random() * 360 };
+      if (s.rules?.morph) {
+        if (!disguiseBot(d, hide)) continue;
+      } else {
+        buildCover(d, spot);
+      }
+      s.botHide = hide;
       hiderEntity();
       return;
     }
   } finally {
     cmd(d, `tickingarea remove ${SCOUT_AREA}`);
   }
+}
+
+/** Picks and applies a random disguise for a bot hider at the given spot. False if no block fits. */
+function disguiseBot(d, hide) {
+  const s = game.state;
+  const type = s.rules.morphType;
+  const kind = type === "both" ? (Math.random() < 0.5 ? "mob" : "block") : type;
+  if (kind === "mob") {
+    const [mob] = disguise.MOBS[Math.floor(Math.random() * disguise.MOBS.length)];
+    s.disguise = { kind, type: mob, applied: true, entityId: null }; // entity spawned by hiderEntity()
+    return true;
+  }
+  const near = disguise.neighbourTypes(d, hide);
+  const options = disguise.BLOCKS.map(([id]) => id).filter((id) => !near.includes(id));
+  for (let i = options.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [options[i], options[j]] = [options[j], options[i]];
+  }
+  for (const block of options) {
+    if (disguise.placeBlock(d, hide, block)) {
+      s.disguise = { kind, type: block, applied: true, entityId: null };
+      return true;
+    }
+  }
+  return false;
 }
 
 /** Best-covered standing spot near px/pz that passes the spot rules. */
@@ -309,6 +343,7 @@ function findSpot(d, px, pz) {
     } catch {}
     const y = ground.location.y + 1;
     if (y < CONFIG.seaLevel) continue;
+    if (game.state.rules?.maxY && y > game.state.rules.maxY) continue;
     const feet = getBlock(d, { x, y, z });
     const head = getBlock(d, { x, y: y + 1, z });
     if (!isOpen(feet) || !isOpen(head) || feet.isLiquid || head.isLiquid) continue;
@@ -362,11 +397,28 @@ function buildCover(d, spot) {
   });
 }
 
-/** The bot hider's entity, respawned at its spot if it went missing. */
+/**
+ * The bot hider's entity (its bot body, or its mob disguise), respawned at its spot if it went missing.
+ * Undefined for a block disguise, which has no entity.
+ */
 export function hiderEntity() {
   const s = game.state;
   const h = s.botHide;
   if (!h) return undefined;
+  const dz = s.disguise;
+  if (dz?.kind === "block") return undefined;
+  if (dz?.kind === "mob") {
+    let e = disguise.liveEntity(dz.entityId);
+    if (!e) {
+      try {
+        e = disguise.spawnDecoy(dim(), dz.type, { x: h.x, y: h.y, z: h.z }, h.yaw);
+        dz.entityId = e.id;
+      } catch {
+        return undefined;
+      }
+    }
+    return e;
+  }
   const id = game.hiderId();
   s.bots ??= {};
   const b = (s.bots[id] ??= {});
@@ -390,7 +442,7 @@ let pool = { round: "", stamp: "", pts: [] };
 
 function clueChecks() {
   return game.state.clues
-    .filter((c) => c.qid && c.from)
+    .filter((c) => c.qid && c.from && !c.cancelled)
     .map((c) => ({ c, q: findQuestion(c.qid)?.question }))
     .filter((x) => x.q?.planar);
 }
@@ -502,7 +554,7 @@ function bestQuestion(b, pts) {
 
 function maybeAsk() {
   const s = game.state;
-  if (s.cooldown > 0) {
+  if (s.cooldown > 0 || s.challenge || s.pending) {
     s.botAskWait = null;
     return;
   }
@@ -647,6 +699,8 @@ function sees(b, target) {
   const dz = t.z - b.z;
   const flat = hyp(dx, dz);
   if (flat <= CONFIG.botTouchRange && Math.abs(t.y - b.y) <= 2.5) return true;
+  // A disguised hider looks like any other mob or block: bots have to walk up and poke it.
+  if (s.disguise?.applied) return false;
 
   if (flat > 0.01) {
     const yaw = (b.look * Math.PI) / 180;
@@ -672,6 +726,16 @@ function sees(b, target) {
     if (!hit) return true;
   }
   return false;
+}
+
+/** Seeker bot positions ({ x, z }) for the minimap. */
+export function seekerPositions() {
+  return seekerBots().map(([, b]) => b);
+}
+
+/** Seeker bots with names, for the hider's radar and teleporting to a bot. */
+export function seekerList() {
+  return seekerBots().map(([id, b]) => ({ id, name: game.nameOf(id), x: b.x, z: b.z }));
 }
 
 /** Distance from a location to the nearest seeker bot (for the hider's HUD). */

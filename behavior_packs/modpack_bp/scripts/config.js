@@ -6,6 +6,12 @@ export const CONFIG = {
   overtimePenaltyPerSecond: 60,
   // Minimum gap between seeker questions.
   questionCooldownSeconds: 60,
+  // Hider powerups: hand limit, how long the hider has to play Cancel on a question, how long they have to
+  // pick cards before the best ones are picked for them, and how long a challenge lasts before it times out.
+  handSize: 5,
+  cancelWindowSeconds: 10,
+  offerSeconds: 45,
+  challengeSeconds: 300,
   // Hider rule: "Above Sea Level" means feet at or above this Y.
   seaLevel: 63,
   // Hider rule: "Near Sky Light" checks columns within this many blocks for open sky.
@@ -14,10 +20,22 @@ export const CONFIG = {
   playAreaRadius: 500,
   // A seeker "finds" the hider by looking straight at them, unobstructed, within this range.
   spotDistance: 24,
-  // After locking in, the hider may not stray further than this from their spot.
-  hiderLeash: 1.5,
+  // Locked-in hiders can't walk (looking around and using blocks still works). As a backup, a hider who
+  // ends up further than this from their spot (pushed, knocked back, or walking isn't lockable) is put back.
+  hiderLeash: 0.4,
   // Delay between one hider being found and the next hiding phase starting.
   betweenRoundsSeconds: 8,
+  // Seekers can teleport (menu → Teleport) once per this many seconds, never into ruled-out areas or during a
+  // challenge.
+  teleportCooldownSeconds: 60,
+  // Scripted world border around the play area: players who cross it are put back inside, and particles
+  // show the edge when someone is within borderWarnDistance of it.
+  border: true,
+  borderWarnDistance: 12,
+  borderParticle: "minecraft:villager_happy",
+  // Minimap grid sizes (cells per side): the small one above the hotbar and the big one in the menu.
+  hudMapSize: 9,
+  menuMapSize: 15,
 
   // --- Bots ----------------------------------------------------------------
   // Bots added when only one person joins (0 turns solo play off).

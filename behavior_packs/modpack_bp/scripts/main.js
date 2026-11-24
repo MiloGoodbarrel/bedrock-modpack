@@ -8,6 +8,22 @@ world.afterEvents.entityHitEntity.subscribe((event) => {
   game.onHit(event.damagingEntity, event.hitEntity);
 });
 
+// Hitting or breaking a disguised hider's block finds them.
+world.afterEvents.entityHitBlock.subscribe((event) => {
+  game.onBlockHit(event.damagingEntity, event.hitBlock.location, event.hitBlock.dimension);
+});
+world.afterEvents.playerBreakBlock.subscribe((event) => {
+  game.onBlockHit(event.player, event.block.location, event.block.dimension);
+});
+
+// Challenge detection: babies born, golems built, TNT lit, bone meal / water bottles used on blocks.
+world.afterEvents.entitySpawn.subscribe((event) => {
+  game.onEntitySpawn(event.entity, event.cause);
+});
+world.afterEvents.playerInteractWithBlock.subscribe((event) => {
+  game.onUseOnBlock(event.player, event.block, event.itemStack);
+});
+
 // Bot entities left behind in chunks that were unloaded get cleaned up when they load again.
 world.afterEvents.entityLoad?.subscribe((event) => bots.onEntityLoad(event.entity));
 

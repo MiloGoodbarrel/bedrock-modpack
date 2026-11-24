@@ -1,4 +1,9 @@
 import { CONFIG } from "./config.js";
+import { neighbourTypes } from "./disguise.js";
+
+const OVERWORLD = "minecraft:overworld";
+const NETHER = "minecraft:nether";
+const END = "minecraft:the_end";
 
 const WET_BLOCKS = new Set([
   "minecraft:water",
@@ -53,18 +58,42 @@ export function insidePlayArea(location, center) {
   return Math.abs(location.x - center.x) <= r && Math.abs(location.z - center.z) <= r;
 }
 
-/** The hider's spot rules, as shown on the hider's HUD. Returns [{ label, ok }]. */
-export function checkSpotRules(player, center) {
+/** Overworld-equivalent x/z (Nether coordinates are 1:8). */
+export function flatPos(entity) {
+  const l = entity.location;
+  if (entity.dimension?.id === NETHER) return { x: l.x * 8, y: l.y, z: l.z * 8 };
+  return { x: l.x, y: l.y, z: l.z };
+}
+
+export function dimensionAllowed(dimId, opts) {
+  return dimId === OVERWORLD || (dimId === NETHER && !!opts.allowNether) || (dimId === END && !!opts.allowEnd);
+}
+
+/**
+ * The hider's spot rules, as shown on the hider's HUD. Returns [{ label, ok }].
+ * opts = the game's settings (allowWater, allowNether, allowEnd, maxY, morph); disguise = the picked disguise.
+ */
+export function checkSpotRules(player, center, opts = {}, disguise = undefined) {
   const { dimension, location } = player;
+  const dimId = dimension.id;
   const feet = blockAt(dimension, location);
   const head = blockAt(dimension, { x: location.x, y: location.y + 1, z: location.z });
-  return [
-    { label: "On Ground", ok: player.isOnGround },
-    { label: "Dry", ok: !player.isInWater && !isWet(feet) && !isWet(head) },
-    { label: "Above Sea Level", ok: Math.floor(location.y) >= CONFIG.seaLevel },
-    { label: "Near Sky Light", ok: nearSkyLight(player) },
-    { label: "Inside Play Area", ok: insidePlayArea(location, center) },
-  ];
+  const y = Math.floor(location.y);
+
+  const rules = [{ label: "On Ground", ok: player.isOnGround }];
+  if (!opts.allowWater) rules.push({ label: "Dry", ok: !player.isInWater && !isWet(feet) && !isWet(head) });
+  if (dimId === OVERWORLD) rules.push({ label: "Above Sea Level", ok: y >= CONFIG.seaLevel });
+  if (dimId !== NETHER) rules.push({ label: "Near Sky Light", ok: nearSkyLight(player) }); // the Nether has no sky
+  if (opts.maxY) rules.push({ label: `Below Y ${opts.maxY}`, ok: y <= opts.maxY });
+  if (dimId !== OVERWORLD) rules.push({ label: "Allowed Dimension", ok: dimensionAllowed(dimId, opts) });
+  if (dimId !== END) rules.push({ label: "Inside Play Area", ok: insidePlayArea(flatPos(player), center) });
+  if (opts.morph) {
+    if (!disguise) rules.push({ label: "Pick a Disguise", ok: false });
+    else if (disguise.kind === "block") {
+      rules.push({ label: "Unlike Neighbours", ok: !neighbourTypes(dimension, location).includes(disguise.type) });
+    }
+  }
+  return rules;
 }
 
 export function formatRules(rules, separator = "\n") {
