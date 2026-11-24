@@ -1,5 +1,7 @@
-// Seeker questions. Each answer() gets the asking seeker and the hider (both Player objects)
-// and returns the answer string. "Me" always means the seeker who asked.
+// Seeker questions. Each answer() gets the asker and the hider (anything with `location`, plus `dimension`
+// for biome checks: players, bot entities, or plain objects) and returns the answer string.
+// "Me" always means the seeker who asked. `planar` questions depend only on x/z, so bots can use them
+// to rule out areas.
 
 function biomeId(player) {
   try {
@@ -25,11 +27,13 @@ export const CATEGORIES = [
       {
         id: "north_south",
         text: "Are you north or south of me?",
+        planar: true,
         answer: (asker, hider) => (hider.location.z < asker.location.z ? "North" : "South"),
       },
       {
         id: "east_west",
         text: "Are you east or west of me?",
+        planar: true,
         answer: (asker, hider) => (hider.location.x > asker.location.x ? "East" : "West"),
       },
       {
@@ -56,6 +60,8 @@ export const CATEGORIES = [
     questions: DISTANCES.map((r) => ({
       id: `within_${r}`,
       text: `Are you within ${r} blocks of me?`,
+      planar: true,
+      radius: r,
       answer: (asker, hider) => {
         const dx = hider.location.x - asker.location.x;
         const dz = hider.location.z - asker.location.z;

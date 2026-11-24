@@ -1,0 +1,18 @@
+{
+  "format_version": "1.10.0",
+  "minecraft:client_entity": {
+    "description": {
+      "identifier": "hs:bot",
+      "materials": { "default": "entity_alphatest" },
+      "textures": {
+        "steve": "textures/entity/steve",
+        "alex": "textures/entity/alex"
+      },
+      "geometry": {
+        "steve": "geometry.humanoid.custom",
+        "alex": "geometry.humanoid.customSlim"
+      },
+      "render_controllers": ["controller.render.hs_bot"]
+    }
+  }
+}

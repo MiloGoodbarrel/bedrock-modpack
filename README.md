@@ -15,15 +15,28 @@ Requires Minecraft Bedrock **1.21.90 or newer**.
 
 1. Everyone gets a glowing **Hide & Seek Menu** book when they join. Use it to open the menu.
 2. Each player picks **Join**. The host stands where the game should start and picks **Start game**.
+   The play area is a 1000×1000 square centered on that spot.
 3. **Hiding (5 minutes):** the hider goes into Creative and builds a spot. Their screen shows a live checklist
    of the spot rules. Seekers wait at the start point.
 4. **Lock in:** the hider locks in from the menu once every rule shows a green check. Going over 5 minutes costs
    1 minute of score per second of overtime.
 5. **Seeking:** seekers go into Survival and search on foot. They use the menu to ask questions, which are
    answered automatically from everyone's real positions.
-6. **Found:** as soon as a seeker has the hider in clear line of sight (within 24 blocks), the hider is found
-   and their time goes on the scoreboard. The next player hides.
+6. **Found:** as soon as a seeker has the hider in clear line of sight (within 24 blocks), or hits them, the
+   hider is found and their time goes on the scoreboard. The next player hides.
 7. When everyone has hidden, the longest hide time wins.
+
+### Solo play
+
+If only one person joins, two bots join the game. Bots look like players and take full turns:
+
+- **Bot hiders** pick a spot somewhere in the play area that passes the spot rules, plant a leafy bush around
+  it, and wait. You have 30 seconds before you can start seeking.
+- **Bot seekers** ask questions (they let people ask first), use every answer to rule out areas, split up to
+  search what's left, and find you by sight. They also find you if they walk right up to you.
+
+Bots only appear in the world near people (or near a bot's hiding spot). Further away they keep moving in the
+background, so they never load far-off chunks.
 
 ### Spot rules
 
@@ -33,6 +46,7 @@ Requires Minecraft Bedrock **1.21.90 or newer**.
 | Dry | Not in water, bubble columns, powder snow, or waterlogged blocks |
 | Above Sea Level | At Y 63 or higher |
 | Near Sky Light | Open sky within 2 blocks of the hider |
+| Inside Play Area | Within the 1000×1000 square around the start point |
 
 Once locked in, the hider is held to their spot.
 
@@ -64,8 +78,8 @@ it up first. To ship an update, raise the pack versions in both `manifest.json` 
 ## Development
 
 ```
-behavior_packs/modpack_bp/   # game logic (scripts/) and the menu item
-resource_packs/modpack_rp/   # textures
+behavior_packs/modpack_bp/   # game logic (scripts/), the menu item, the bot entity
+resource_packs/modpack_rp/   # textures, bot model
 docs/                        # reference rules and design notes
 tools/                       # dev-install and build scripts
 ```
@@ -74,6 +88,7 @@ The scripts use the stable Script API (`@minecraft/server` 2.0.0 and `@minecraft
 
 - `scripts/main.js`: event wiring and timers
 - `scripts/game.js`: game state, turns, scoring and found detection
+- `scripts/bots.js`: AI players for solo games
 - `scripts/ui.js`: menus
 - `scripts/questions.js`: question definitions and answers
 - `scripts/rules.js`: spot rule checks
@@ -103,6 +118,7 @@ This creates `dist/HideAndSeek.mcaddon`.
 
 - [x] Lobby, hider rotation, Creative build phase with a spot-rule checklist, and overtime penalty
 - [x] Seeking phase, Comparing and Distance questions, clue log, automatic found detection, scoreboard
+- [x] Solo play against two bots, and a 1000×1000 play area
 - [ ] Observation and Task questions, and re-asking a used question for double rewards
 - [ ] Hider powerup cards: time bonuses, challenges and cancels, with a 5-card hand
 - [ ] Mob and block disguise game modes

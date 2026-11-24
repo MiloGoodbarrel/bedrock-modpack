@@ -1,6 +1,15 @@
 import { world, system } from "@minecraft/server";
 import * as game from "./game.js";
+import * as bots from "./bots.js";
 import { openMenu } from "./ui.js";
+
+// Punching the hider (person or bot) finds them.
+world.afterEvents.entityHitEntity.subscribe((event) => {
+  game.onHit(event.damagingEntity, event.hitEntity);
+});
+
+// Bot entities left behind in chunks that were unloaded get cleaned up when they load again.
+world.afterEvents.entityLoad?.subscribe((event) => bots.onEntityLoad(event.entity));
 
 world.afterEvents.worldLoad.subscribe(() => {
   game.load();

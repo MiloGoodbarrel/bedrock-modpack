@@ -46,8 +46,15 @@ function nearSkyLight(player) {
   return false;
 }
 
+/** True if x/z is inside the square play area around center (always true without a center). */
+export function insidePlayArea(location, center) {
+  if (!center) return true;
+  const r = CONFIG.playAreaRadius;
+  return Math.abs(location.x - center.x) <= r && Math.abs(location.z - center.z) <= r;
+}
+
 /** The hider's spot rules, as shown on the hider's HUD. Returns [{ label, ok }]. */
-export function checkSpotRules(player) {
+export function checkSpotRules(player, center) {
   const { dimension, location } = player;
   const feet = blockAt(dimension, location);
   const head = blockAt(dimension, { x: location.x, y: location.y + 1, z: location.z });
@@ -56,6 +63,7 @@ export function checkSpotRules(player) {
     { label: "Dry", ok: !player.isInWater && !isWet(feet) && !isWet(head) },
     { label: "Above Sea Level", ok: Math.floor(location.y) >= CONFIG.seaLevel },
     { label: "Near Sky Light", ok: nearSkyLight(player) },
+    { label: "Inside Play Area", ok: insidePlayArea(location, center) },
   ];
 }
 

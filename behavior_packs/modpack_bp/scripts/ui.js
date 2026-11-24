@@ -51,10 +51,12 @@ export async function openMenu(player) {
 // --- Lobby -----------------------------------------------------------------
 
 function lobbyMenu(player) {
-  const names = game.state.players.map((p) => p.name);
+  const names = game.humans().map((p) => p.name);
+  const botCount = game.botsForLobby();
   const body =
-    `Players (${names.length}): ${names.length ? names.join(", ") : "nobody yet"}\n\n` +
-    "Everyone takes a turn hiding. The hider builds a spot, the seekers ask questions to narrow it down. " +
+    `Players (${names.length}): ${names.length ? names.join(", ") : "nobody yet"}\n` +
+    (botCount ? `§eSolo game: ${botCount} bots will play with you.§r\n` : "") +
+    "\nEveryone takes a turn hiding. The hider builds a spot, the seekers ask questions to narrow it down. " +
     "Longest hide time wins.";
   const buttons = [];
   if (game.isJoined(player)) buttons.push(["§cLeave", () => game.leave(player)]);
@@ -76,15 +78,20 @@ function howToPlay(player) {
     "- Dry (water and powder snow count as wet)",
     `- Above Sea Level (Y ${CONFIG.seaLevel}+)`,
     "- Near Sky Light (open sky close by)",
+    `- Inside Play Area (${CONFIG.playAreaRadius * 2}x${CONFIG.playAreaRadius * 2} around the start point)`,
     "Lock in from the menu. You switch to Survival and can't leave your spot.",
     "",
     "§l2. Seek§r",
     `Seekers ask questions from the menu (one every ${CONFIG.questionCooldownSeconds}s, each once per round). ` +
       "\"Me\" means the seeker asking, so where you stand matters.",
-    "Look straight at the hider with nothing in the way to find them.",
+    "Look straight at the hider with nothing in the way, or hit them, to find them.",
     "",
     "§l3. Score§r",
     "Your hide time counts until you're found. Highest total wins.",
+    "",
+    "§lSolo§r",
+    `Start alone and ${CONFIG.botsWhenSolo} bots join. Bots hide in leafy bushes, ask questions, ` +
+      "and hunt you using every answer given so far.",
   ].join("\n");
   return menu(player, "How to play", body, [["Back", () => openMenu(player)]]);
 }
@@ -93,7 +100,7 @@ function howToPlay(player) {
 
 function hiderBuildMenu(player) {
   const s = game.state;
-  const rules = checkSpotRules(player);
+  const rules = checkSpotRules(player, s.center);
   const timer = s.hidingLeft > 0 ? `Build time left: ${game.fmt(s.hidingLeft)}` : `§cOVERTIME: +${s.overtime}s§r`;
   const body = `${timer}\n\nSpot rules (where you're standing now):\n${formatRules(rules)}`;
   return menu(player, "Your hiding spot", body, [

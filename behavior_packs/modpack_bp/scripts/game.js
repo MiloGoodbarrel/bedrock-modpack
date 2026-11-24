@@ -1,7 +1,8 @@
-import { world, system, GameMode, ItemStack, ItemLockMode, DisplaySlotId } from "@minecraft/server";
+import { world, GameMode, ItemStack, ItemLockMode, DisplaySlotId } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 import { checkSpotRules, formatRules } from "./rules.js";
 import { findQuestion } from "./questions.js";
+import * as bots from "./bots.js";
 
 export const MENU_ITEM = "hs:menu";
 const STATE_KEY = "hs:state";
@@ -12,6 +13,8 @@ const GM_CREATIVE = GameMode.Creative ?? GameMode.creative;
 const GM_SURVIVAL = GameMode.Survival ?? GameMode.survival;
 const LOCK_INVENTORY = ItemLockMode.inventory ?? ItemLockMode.Inventory;
 
+export const isBotId = bots.isBotId;
+
 // ---------------------------------------------------------------------------
 // State (persisted as JSON in a world dynamic property)
 // ---------------------------------------------------------------------------
@@ -19,20 +22,27 @@ const LOCK_INVENTORY = ItemLockMode.inventory ?? ItemLockMode.Inventory;
 function freshState(players = []) {
   return {
     phase: "lobby", // lobby | hiding | seeking | between | ended
-    players, // [{ id, name }] in join order
+    players, // [{ id, name, bot?, skin? }] in join order
+    gameId: "",
     order: [], // hider order (player ids)
     turn: -1,
-    center: null, // gathering point seekers return to each round
+    center: null, // start point: seekers return here each round, and the play area is centered on it
     dimId: "minecraft:overworld",
     hidingLeft: 0,
     overtime: 0,
     hiderSeconds: 0,
     spot: null, // { x, y, z, dimId } once the hider locks in
     used: [], // question ids asked this round
-    clues: [], // [{ by, text, answer }]
+    clues: [], // [{ by, text, answer, qid, from }]
     cooldown: 0,
     betweenLeft: 0,
     scores: {}, // id -> final seconds
+    // Bot state (see bots.js)
+    bots: {},
+    botHide: null,
+    searched: [],
+    searchSeq: 0,
+    botAskWait: null,
   };
 }
 
@@ -47,6 +57,7 @@ export function load() {
     console.warn(`[hs] could not load state: ${e}`);
   }
   loaded = true;
+  bots.removeStray();
 }
 
 function save() {
@@ -78,6 +89,10 @@ export function nameOf(id) {
   return state.players.find((x) => x.id === id)?.name ?? "Unknown";
 }
 
+export function humans() {
+  return state.players.filter((p) => !p.bot);
+}
+
 export function hiderId() {
   return state.order[state.turn];
 }
@@ -92,6 +107,23 @@ export function isSeeker(player) {
 
 function onlineSeekers() {
   return world.getAllPlayers().filter((p) => isSeeker(p));
+}
+
+export function humanSeekersOnline() {
+  return onlineSeekers().length > 0;
+}
+
+/**
+ * The current hider as something with id/location/dimension: the Player, the bot's entity, or (if a bot's
+ * entity can't be loaded) a stand-in at its spot. Undefined if a human hider is offline.
+ */
+export function hiderTarget() {
+  const id = hiderId();
+  if (!isBotId(id)) return getPlayer(id);
+  const e = bots.hiderEntity();
+  if (e) return e;
+  const s = state.spot;
+  return s ? { id, location: { x: s.x, y: s.y, z: s.z }, dimension: world.getDimension(s.dimId) } : undefined;
 }
 
 function tell(player, msg) {
@@ -211,7 +243,7 @@ export function join(player) {
   if (isJoined(player)) return;
   state.players.push({ id: player.id, name: player.name });
   save();
-  broadcast(`§a${player.name} joined Hide & Seek (${state.players.length} players).`);
+  broadcast(`§a${player.name} joined Hide & Seek (${humans().length} players).`);
 }
 
 export function leave(player) {
@@ -230,23 +262,34 @@ function shuffle(arr) {
   return a;
 }
 
+/** Bots that will be added if the game starts with the current lobby. */
+export function botsForLobby() {
+  return humans().length === 1 ? CONFIG.botsWhenSolo : 0;
+}
+
 export function start(host) {
   if (state.phase !== "lobby") return tell(host, "§cA game is already running.");
-  if (state.players.length < 2) return tell(host, "§cYou need at least 2 joined players to start.");
-  const offline = state.players.filter((x) => !getPlayer(x.id));
+  const people = humans();
+  const players = [...people, ...bots.makeBots(botsForLobby())];
+  if (players.length < 2) return tell(host, "§cYou need at least 2 joined players to start.");
+  const offline = people.filter((x) => !getPlayer(x.id));
   if (offline.length) return tell(host, `§cThese players aren't online: ${offline.map((x) => x.name).join(", ")}`);
 
   const loc = host.location;
   state = {
-    ...freshState(state.players),
-    order: shuffle(state.players.map((x) => x.id)),
+    ...freshState(players),
+    gameId: String(Date.now()),
+    order: shuffle(players.map((x) => x.id)),
     center: { x: Math.floor(loc.x) + 0.5, y: Math.floor(loc.y), z: Math.floor(loc.z) + 0.5 },
     dimId: host.dimension.id,
   };
   for (const p of state.players) state.scores[p.id] = 0;
   runCommand("gamerule locatorbar false");
   resetBoard();
-  broadcast(`§6Hide & Seek started! Hider order: ${state.order.map(nameOf).join(" → ")}`);
+  const size = CONFIG.playAreaRadius * 2;
+  if (players.length > people.length) broadcast(`§6Playing solo with ${players.length - people.length} bots.`);
+  broadcast(`§6Hide & Seek started! Play area: ${size}x${size} around here.`);
+  broadcast(`§6Hider order: ${state.order.map(nameOf).join(" → ")}`);
   startTurn(0);
 }
 
@@ -257,16 +300,19 @@ export function start(host) {
 function startTurn(turn) {
   state.turn = turn;
   state.phase = "hiding";
-  state.hidingLeft = CONFIG.hidingSeconds;
   state.overtime = 0;
   state.hiderSeconds = 0;
   state.spot = null;
   state.used = [];
   state.clues = [];
   state.cooldown = 0;
-  save();
+  bots.onTurnStart();
 
   const id = hiderId();
+  const botHider = isBotId(id);
+  state.hidingLeft = botHider ? CONFIG.botHidingSeconds : CONFIG.hidingSeconds;
+  save();
+
   const dimension = world.getDimension(state.dimId);
   for (const p of world.getAllPlayers()) {
     if (!isJoined(p)) continue;
@@ -288,7 +334,7 @@ function startTurn(turn) {
 /** Hider locks in their spot. Returns the failed rules (empty on success). */
 export function lockIn(player) {
   if (state.phase !== "hiding" || player.id !== hiderId()) return [];
-  const failed = checkSpotRules(player).filter((r) => !r.ok);
+  const failed = checkSpotRules(player, state.center).filter((r) => !r.ok);
   if (failed.length) return failed;
 
   const loc = player.location;
@@ -306,25 +352,47 @@ export function lockIn(player) {
   return [];
 }
 
+function lockInBot() {
+  const h = state.botHide;
+  state.spot = { x: h.x, y: h.y, z: h.z, dimId: state.dimId };
+  state.phase = "seeking";
+  save();
+  titleAll("§cSeekers, go!", `${nameOf(hiderId())} is hidden`);
+}
+
 export function canAsk(player) {
   if (state.phase !== "seeking") return "Questions open once the hider locks in.";
   if (!isSeeker(player)) return "Only seekers can ask questions.";
   if (state.cooldown > 0) return `Next question in ${fmt(state.cooldown)}.`;
-  if (!getPlayer(hiderId())) return "The hider is offline.";
+  if (!hiderTarget()) return "The hider is offline.";
   return undefined;
 }
 
+/** A person asks a question from the menu. */
 export function ask(asker, questionId) {
   const blocked = canAsk(asker);
   if (blocked) return tell(asker, `§c${blocked}`);
   if (state.used.includes(questionId)) return tell(asker, "§cThat question was already asked this round.");
+  askAs(asker, questionId);
+}
+
+/** Answers a question for any asker with name/location/dimension (a Player or a bot). */
+export function askAs(asker, questionId) {
+  if (state.phase !== "seeking" || state.used.includes(questionId)) return;
   const found = findQuestion(questionId);
-  if (!found) return;
-  const hider = getPlayer(hiderId());
+  const hider = hiderTarget();
+  if (!found || !hider) return;
 
   const answer = found.question.answer(asker, hider);
+  const l = asker.location;
   state.used.push(questionId);
-  state.clues.push({ by: asker.name, text: found.question.text, answer });
+  state.clues.push({
+    by: asker.name,
+    text: found.question.text,
+    answer,
+    qid: questionId,
+    from: { x: l.x, y: l.y, z: l.z },
+  });
   state.cooldown = CONFIG.questionCooldownSeconds;
   save();
 
@@ -332,7 +400,7 @@ export function ask(asker, questionId) {
   for (const p of world.getAllPlayers()) {
     if (isSeeker(p) || p.id === hider.id) {
       p.onScreenDisplay.setTitle(`§e${answer}`, {
-        subtitle: found.question.text,
+        subtitle: `${asker.name}: ${found.question.text}`,
         fadeInDuration: 5,
         stayDuration: 60,
         fadeOutDuration: 10,
@@ -341,7 +409,7 @@ export function ask(asker, questionId) {
   }
 }
 
-/** Ends the current seeking phase. finder is a Player or undefined (forced). */
+/** Ends the current round. finder is anything with a name (Player or bot), or undefined (forced). */
 export function found(finder) {
   if (state.phase !== "seeking" && state.phase !== "hiding") return;
   const id = hiderId();
@@ -349,8 +417,12 @@ export function found(finder) {
   state.scores[id] = score;
   setBoardScore(id, score);
 
-  const hider = getPlayer(id);
-  if (hider) restoreNameTag(hider);
+  if (isBotId(id)) {
+    bots.onHiderFound();
+  } else {
+    const hider = getPlayer(id);
+    if (hider) restoreNameTag(hider);
+  }
 
   const who = finder ? `${finder.name} found ${nameOf(id)}` : `${nameOf(id)}'s round ended`;
   broadcast(`§6${who}! Hide time: ${fmt(score)}`);
@@ -367,6 +439,7 @@ export function found(finder) {
 
 function endGame() {
   state.phase = "ended";
+  bots.cleanup();
   save();
   for (const p of world.getAllPlayers()) {
     restoreNameTag(p);
@@ -385,17 +458,25 @@ export function rankings() {
     .sort((a, b) => b.seconds - a.seconds);
 }
 
-/** Back to the lobby, keeping the joined players. */
+/** Back to the lobby, keeping the joined people (bots are removed). */
 export function reset() {
   for (const p of world.getAllPlayers()) {
     restoreNameTag(p);
     if (isJoined(p) && state.phase !== "lobby") setMode(p, GM_SURVIVAL);
   }
   if (state.phase !== "lobby") runCommand("gamerule locatorbar true");
-  state = freshState(state.players);
+  bots.cleanup();
+  state = freshState(humans());
   save();
   clearBoard();
   broadcast("§eHide & Seek reset to the lobby.");
+}
+
+/** A seeker punching the hider (person or bot) finds them. */
+export function onHit(attacker, target) {
+  if (state.phase !== "seeking" || attacker?.typeId !== "minecraft:player" || !isSeeker(attacker)) return;
+  const hider = hiderTarget();
+  if (hider && hider.id === target.id) found(attacker);
 }
 
 // ---------------------------------------------------------------------------
@@ -413,7 +494,7 @@ export function tickSecond() {
   if (!loaded) return;
   switch (state.phase) {
     case "hiding":
-      return tickHiding();
+      return isBotId(hiderId()) ? tickBotHiding() : tickHiding();
     case "seeking":
       return tickSeeking();
     case "between":
@@ -439,26 +520,43 @@ function tickHiding() {
   if (state.hidingLeft % 10 === 0) save();
 
   const timer = state.hidingLeft > 0 ? `§eBuild time: ${fmt(state.hidingLeft)}` : `§cOVERTIME +${state.overtime}s`;
-  actionBar(hider, `${timer}\n${formatRules(checkSpotRules(hider), "  ")}`);
+  actionBar(hider, `${timer}\n${formatRules(checkSpotRules(hider, state.center), "  ")}`);
   const seekerText =
     state.hidingLeft > 0 ? `§e${hider.name} is hiding... ${fmt(state.hidingLeft)}` : `§c${hider.name} is in overtime!`;
   for (const p of onlineSeekers()) actionBar(p, seekerText);
+  bots.tickSecond();
+}
+
+function tickBotHiding() {
+  bots.ensureHidePlan();
+  if (state.hidingLeft > 0) state.hidingLeft--;
+  else if (bots.hideReady()) return lockInBot();
+  const name = nameOf(hiderId());
+  const text = state.hidingLeft > 0 ? `§e${name} is hiding... ${fmt(state.hidingLeft)}` : `§e${name} is finishing their spot...`;
+  for (const p of onlineSeekers()) actionBar(p, text);
+  bots.tickSecond();
 }
 
 function tickSeeking() {
-  const hider = getPlayer(hiderId());
+  const id = hiderId();
+  const hider = hiderTarget();
   if (!hider) {
-    for (const p of onlineSeekers()) actionBar(p, `§7Paused: ${nameOf(hiderId())} is offline`);
+    for (const p of onlineSeekers()) actionBar(p, `§7Paused: ${nameOf(id)} is offline`);
     return;
   }
   state.hiderSeconds++;
   if (state.cooldown > 0) state.cooldown--;
   if (state.hiderSeconds % 10 === 0) save();
-  setBoardScore(hider.id, currentScore());
+  setBoardScore(id, currentScore());
 
-  if (!leashHider(hider)) actionBar(hider, `§aHidden for ${fmt(currentScore())}`);
+  if (!isBotId(id) && !leashHider(hider)) {
+    const near = bots.nearestSeekerDistance(hider.location);
+    const extra = near === undefined ? "" : `  §7nearest bot: ${Math.round(near)} blocks`;
+    actionBar(hider, `§aHidden for ${fmt(currentScore())}${extra}`);
+  }
   const q = state.cooldown > 0 ? `§7next question in ${fmt(state.cooldown)}` : "§aquestion ready";
-  for (const p of onlineSeekers()) actionBar(p, `§eSeeking ${hider.name} §f${fmt(state.hiderSeconds)}  ${q}`);
+  for (const p of onlineSeekers()) actionBar(p, `§eSeeking ${nameOf(id)} §f${fmt(state.hiderSeconds)}  ${q}`);
+  bots.tickSecond();
 }
 
 /** Pulls the hider back to their locked spot if they wander. Returns true if it had to. */
@@ -501,14 +599,15 @@ export function canSee(seeker, hider) {
   }
 }
 
-/** Runs a few times per second: auto-detects a seeker spotting the hider. */
+/** Runs a few times per second: seekers (people and bots) spotting the hider. */
 export function tickFast() {
   if (!loaded || state.phase !== "seeking") return;
-  const hider = getPlayer(hiderId());
+  const hider = hiderTarget();
   if (!hider) return;
   for (const seeker of onlineSeekers()) {
     if (canSee(seeker, hider)) return found(seeker);
   }
+  bots.tickFast(hider);
 }
 
 /** Skip the current hider's turn (they keep 0 or their time so far). */

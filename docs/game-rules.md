@@ -98,7 +98,10 @@ shapeshift mod layered on top.
 
 ### Map
 
-- Play area ~**500×500** around spawn, shown on the minimap with biomes visible.
+- Play area **1000×1000** (500 blocks each way from spawn), shown on the minimap with biomes visible.
+  A 500×500 map would make the "within 500 blocks" question almost useless, since it would cover nearly the
+  whole field from anywhere. On 1000×1000 it rules out a meaningful chunk. The add-on uses a 1000×1000 square
+  centered on the start point (`playAreaRadius` in config.js).
 - Players appear on the map as dots.
 - **Teleport from the map:** seekers click any point of the map to teleport there (or to a teammate).
   Has a short cooldown; **can't teleport into eliminated (grey) area**; disabled while a challenge is active.

@@ -1,0 +1,14 @@
+{
+  "format_version": "1.8.0",
+  "render_controllers": {
+    "controller.render.hs_bot": {
+      "arrays": {
+        "textures": { "Array.skins": ["Texture.steve", "Texture.alex"] },
+        "geometries": { "Array.geos": ["Geometry.steve", "Geometry.alex"] }
+      },
+      "geometry": "Array.geos[query.property('hs:skin')]",
+      "materials": [{ "*": "Material.default" }],
+      "textures": ["Array.skins[query.property('hs:skin')]"]
+    }
+  }
+}
