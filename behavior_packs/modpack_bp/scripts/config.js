@@ -6,6 +6,9 @@ export const CONFIG = {
   overtimePenaltyPerSecond: 60,
   // Minimum gap between seeker questions.
   questionCooldownSeconds: 60,
+  // Seekers take turns asking (round robin). Once a question is ready, the seeker whose turn it is has this
+  // long to ask before the turn passes to the next seeker.
+  askTurnSeconds: 60,
   // Hider powerups: hand limit, how long the hider has to play Cancel on a question, how long they have to
   // pick cards before the best ones are picked for them, and how long a challenge lasts before it times out.
   handSize: 5,
@@ -33,6 +36,19 @@ export const CONFIG = {
   border: true,
   borderWarnDistance: 12,
   borderParticle: "minecraft:villager_happy",
+  // Red lines in the sky outlining where the hider can still be, so they show on real map items. Drawn near
+  // players at skyLineY, skyLineWidth blocks wide (wider shows better on zoomed-out maps), a few chunks per
+  // second. Everyone gets an empty locator map when a game starts.
+  skyLines: true,
+  skyLineY: 316,
+  skyLineWidth: 4,
+  skyLineBlock: "minecraft:red_wool",
+  skyLineChunksPerSecond: 8,
+  giveMaps: true,
+  // Scan the play area's terrain in the background so the map shows water, forests, snow... (saved per start
+  // point). terrainGrid samples per side: 25 = one sample every 40 blocks on a 1000-block area.
+  terrainScan: true,
+  terrainGrid: 25,
   // Minimap grid sizes (cells per side): the small one above the hotbar and the big one in the menu.
   hudMapSize: 9,
   menuMapSize: 15,
@@ -57,6 +73,4 @@ export const CONFIG = {
   botSearchRadius: 10,
   // Bots appear in the world when this close to a person (or a bot's hiding spot).
   botActiveRange: 48,
-  // When people are seeking too, bots wait this long after the cooldown before asking, so people get first pick.
-  botAskDelay: 20,
 };

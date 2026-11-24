@@ -558,24 +558,29 @@ function maybeAsk() {
     s.botAskWait = null;
     return;
   }
-  const seekers = seekerBots();
-  if (!seekers.length) return;
-  if (s.botAskWait == null) s.botAskWait = game.humanSeekersOnline() ? CONFIG.botAskDelay : 2;
+  // Round robin: only the bot whose turn it is asks, after a short "thinking" pause.
+  const turn = game.currentAsker();
+  const mine = seekerBots().find(([id]) => id === turn);
+  if (!mine) {
+    s.botAskWait = null;
+    return;
+  }
+  if (s.botAskWait == null) s.botAskWait = 3;
   if (--s.botAskWait > 0) return;
   s.botAskWait = null;
 
+  const [id, b] = mine;
   const pts = candidates();
-  if (pts.length < 4) return;
-  let best;
-  for (const [id, b] of seekers) {
-    const pick = bestQuestion(b, pts);
-    if (pick && (!best || pick.score > best.score)) best = { ...pick, id, b };
+  const pick = pts.length >= 4 ? bestQuestion(b, pts) : undefined;
+  if (!pick) {
+    // Nothing useful to ask from here: pass the turn on.
+    game.broadcast(`§7${game.nameOf(id)} passed their turn to ask.`);
+    game.advanceAsker();
+    return;
   }
-  if (!best) return;
-  const b = best.b;
   game.askAs(
-    { name: game.nameOf(best.id), location: { x: b.x, y: b.y ?? s.center.y, z: b.z }, dimension: dim() },
-    best.q.id
+    { name: game.nameOf(id), location: { x: b.x, y: b.y ?? s.center.y, z: b.z }, dimension: dim() },
+    pick.q.id
   );
 }
 

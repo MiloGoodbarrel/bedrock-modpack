@@ -11,7 +11,7 @@ ConnorIGL on YouTube. This is an independent rebuild for Bedrock. No code or ass
 Works on Windows, Xbox, PlayStation, Switch, mobile and Realms. **No experimental toggles needed.**
 Requires Minecraft Bedrock **1.21.90 or newer**.
 
-> **Status:** early development (v0.7.0). Every feature below is written, but none of it has been playtested
+> **Status:** early development (v0.10.0). Every feature below is written, but none of it has been playtested
 > in game yet, so expect bugs. Please report anything that shows up in the Content Log (Settings → Creator).
 
 ## How to play
@@ -66,8 +66,9 @@ If only one person joins, two bots join the game. Bots look like players and tak
 
 - **Bot hiders** pick a spot somewhere in the play area that passes the spot rules, plant a leafy bush around
   it, and wait. You have 30 seconds before you can start seeking.
-- **Bot seekers** ask questions (they let people ask first), use every answer to rule out areas, split up to
-  search what's left, and find you by sight. They also find you if they walk right up to you.
+- **Bot seekers** take their turns asking like everyone else, picking whichever question narrows things down
+  most (or passing if nothing helps). They use every answer to rule out areas, split up to search what's
+  left, and find you by sight. They also find you if they walk right up to you.
 
 Bots only appear in the world near people (or near a bot's hiding spot). Further away they keep moving in the
 background, so they never load far-off chunks.
@@ -90,6 +91,11 @@ to how it was once the game ends.
 
 Seekers ask from the **question board** (menu → Questions), with a 1-minute cooldown between questions. Asked
 questions are greyed out, but they can be asked again, which gives the hider double powerups.
+
+**Seekers take turns asking (round robin)**, so one seeker can't ask every question. The asking order is shown
+in the seeker menu and above the hotbar, and it starts with a different seeker each round. Once a question is
+ready, the seeker whose turn it is has 60 seconds to ask. They can also pass. Otherwise the turn moves on.
+Offline seekers are skipped, and bots take their turns too.
 
 | Category | Hider earns | Questions |
 |---|---|---|
@@ -127,15 +133,34 @@ discard any extras.
 
 ### Map
 
-The play area is drawn as a grid of squares, with north at the top. Squares that the answers rule out go dark,
-squares that are partly ruled out turn orange, and players show up as colored dots. The hider only appears on
-their own map. There are two versions:
+The play area is drawn as a grid of colored squares, with north at the top. When a game starts, the add-on
+scans the play area's terrain in the background, sampling every 40 blocks. This takes a few minutes, about
+one build phase. After that the map shows water, ice, grass, forest, sand, badlands, snow, stone and lava.
+The scan is saved, so later games from the same start point skip it.
+
+As answers come in, ruled-out squares turn black and partly ruled-out squares turn dark grey. Players show up
+as colored dots, and the hider only appears on their own map. The blackout starts over with each new hider.
+There are two versions:
 
 - **HUD minimap:** a small 9×9 map above the hotbar. It's on by default, and each player can turn it on or
   off with the **HUD minimap** button in the menu.
-- **Map** (menu button): a bigger 15×15 map with a legend.
+- **Map** (menu button): a bigger 15×15 map with a legend and the scan's progress.
 
-Bedrock scripts can't draw real map pictures, so the map doesn't show terrain or biomes.
+### Real maps: red lines in the sky
+
+The ordinary map item works too. Add-ons can't draw on maps, but a map shows the highest block in each column.
+So during a round, the add-on places a band of **red wool high in the sky (Y 316)** along the edge of where
+the hider can still be. Before any answers, that edge is the play area's square border. After each answer it's
+the new, smaller shape.
+
+- **Every hider's round starts with a clean map.** At the start of each turn, everyone's maps are taken away
+  and replaced with one fresh **empty locator map**, so old lines and markers are gone. Use it to start
+  mapping, then hold it in your off hand. The map fills in as you explore, and the red outline appears on it.
+- Lines are drawn only in chunks near players, a few per second. Those are the only places maps update anyway.
+- Old lines from an earlier answer, round or game are cleared in the background, including far-away ones,
+  which get loaded briefly to do it. The sky is clean again shortly after each new round starts.
+- A fresh map covers 128×128 blocks. Zoom out at a cartography table (with paper) to see more. The lines are
+  4 blocks wide so they still show on zoomed-out maps; `skyLineWidth` in config.js changes that.
 
 ## Installing
 
@@ -167,7 +192,8 @@ The scripts use the stable Script API (`@minecraft/server` 2.0.0 and `@minecraft
 - `scripts/bots.js`: AI players for solo games
 - `scripts/disguise.js`: mob and block morphs
 - `scripts/settings.js`: admin game settings
-- `scripts/map.js`: the minimap
+- `scripts/map.js`, `terrain.js`: the minimap and the background terrain scan
+- `scripts/skylines.js`: red sky lines that show the search area on real map items
 - `scripts/powerups.js`, `cards.js`, `challenges.js`: answers, hider cards, Cancel and challenges
 - `scripts/ui.js`: menus
 - `scripts/questions.js`: question definitions and answers
@@ -206,7 +232,9 @@ This creates `dist/HideAndSeek.mcaddon`.
 - [x] A map that blacks out areas as questions rule them out (HUD minimap and menu map)
 - [x] Seeker teleports, hider seeker radar, scripted world border
 - [ ] First full playtest and bug fixes
-- [ ] Optional terrain map in the off hand, alongside the blackout grid
+- [x] Terrain scan, so the map shows the landscape under the blackout
+- [x] Real map items: search-area outline drawn as red wool in the sky, with a fresh map every round
+- [x] Round-robin question turns between seekers
 - [ ] Custom HUD layout so the minimap sits in a screen corner
 See [docs/game-rules.md](docs/game-rules.md) for the full reference rules gathered from the videos.
 

@@ -76,6 +76,7 @@ export function ask(asker, questionId) {
     left: CONFIG.cancelWindowSeconds,
   };
   s.pending = pending;
+  game.advanceAsker(); // round robin: the next seeker asks next
   game.broadcast(
     `${category.color}[${category.name}] §f${asker.name}: ${question.text}` +
       (repeat ? " §7(asked again: double powerups)" : "")

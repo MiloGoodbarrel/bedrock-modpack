@@ -5,9 +5,14 @@ import { world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 import { findQuestion } from "./questions.js";
 import { flatPos } from "./rules.js";
+import * as terrain from "./terrain.js";
 
 const CELL = "■";
-const COLOR = { in: "§2", part: "§6", out: "§8" };
+// Without terrain data yet: plain green / orange / grey. With terrain: the terrain color, dark grey for partly
+// ruled out, black for ruled out. Player dots use colors the terrain never does.
+const PLAIN = { in: "§2", part: "§6", out: "§8" };
+const OVER_TERRAIN = { part: "§8", out: "§0" };
+const DOT = { me: "§d", seeker: "§5", bot: "§3", hider: "§4" };
 const HUD_KEY = "hs:hudmap";
 
 /** Per-player HUD minimap toggle (on by default). */
@@ -43,6 +48,12 @@ function possible(x, z, checks) {
 /** True if the answers so far still allow the hider to be at x/z (overworld-equivalent coordinates). */
 export function possibleAt(state, x, z) {
   return possible(x, z, planarChecks(state.clues));
+}
+
+/** Same as possibleAt, as a reusable function for checking many points against the current clues. */
+export function possibleFn(state) {
+  const checks = planarChecks(state.clues);
+  return (x, z) => possible(x, z, checks);
 }
 
 let cache = { key: "", grid: null };
@@ -89,12 +100,20 @@ function cellOf(state, size, entity) {
  */
 function markers(state, viewer, deps) {
   const out = [];
-  for (const b of deps.seekerBots()) out.push({ entity: { location: { x: b.x, y: 0, z: b.z } }, color: "§d" });
+  for (const b of deps.seekerBots()) out.push({ entity: { location: { x: b.x, y: 0, z: b.z } }, color: DOT.bot });
   for (const p of world.getAllPlayers()) {
-    if (p.id !== viewer.id && deps.isSeeker(p)) out.push({ entity: p, color: "§b" });
+    if (p.id !== viewer.id && deps.isSeeker(p)) out.push({ entity: p, color: DOT.seeker });
   }
-  out.push({ entity: viewer, color: viewer.id === deps.hiderId() ? "§c" : "§f" });
+  out.push({ entity: viewer, color: viewer.id === deps.hiderId() ? DOT.hider : DOT.me });
   return out;
+}
+
+function cellColor(state, size, row, col, v) {
+  const r = CONFIG.playAreaRadius;
+  const cell = (2 * r) / size;
+  const base = terrain.colorAt(state, state.center.x - r + (col + 0.5) * cell, state.center.z - r + (row + 0.5) * cell);
+  if (!base) return PLAIN[v];
+  return v === "in" ? base : OVER_TERRAIN[v];
 }
 
 /** The map as lines of text. */
@@ -108,13 +127,23 @@ export function renderMap(state, viewer, size, deps) {
     marks.set(`${row},${col}`, m.color);
   }
   return g.map((line, row) =>
-    line.map((v, col) => `${marks.get(`${row},${col}`) ?? COLOR[v]}${CELL}`).join("") + "§r"
+    line.map((v, col) => `${marks.get(`${row},${col}`) ?? cellColor(state, size, row, col, v)}${CELL}`).join("") + "§r"
   );
 }
 
-export const LEGEND =
-  "§fN§r is up · §2■§r possible · §6■§r partly ruled out · §8■§r ruled out\n" +
-  "§f■§r you · §b■§r other seekers · §d■§r bots · §c■§r you (hider)";
+/** Legend text for the menu map, matching whether terrain has been scanned yet. */
+export function legend(state) {
+  const dots = `${DOT.me}■§r you · ${DOT.seeker}■§r other seekers · ${DOT.bot}■§r bots · ${DOT.hider}■§r you (hider)`;
+  const done = terrain.progress(state);
+  if (done <= 0) return `§fN§r is up · §2■§r possible · §6■§r partly ruled out · §8■§r ruled out\n${dots}`;
+  const scan = done < 1 ? `\n§7Terrain scan: ${Math.floor(done * 100)}%§r` : "";
+  return (
+    "§fN§r is up · §0■§r ruled out · §8■§r partly ruled out\n" +
+    "§9■§r water §b■§r ice §a■§r grass §2■§r forest §e■§r sand §6■§r dirt/badlands §f■§r snow §7■§r stone §c■§r lava\n" +
+    dots +
+    scan
+  );
+}
 
 /** Cell size in blocks for a map of this size. */
 export function cellBlocks(size) {

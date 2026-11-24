@@ -10,7 +10,7 @@ import { checkSpotRules, formatRules } from "./rules.js";
 import { CONFIG } from "./config.js";
 import { getSettings, saveSettings, isAdmin, describeSettings, MORPH_TYPES, HEIGHT_LIMITS } from "./settings.js";
 import { MOBS, BLOCKS, heldBlock, prettyId } from "./disguise.js";
-import { hudMapOn, setHudMap, LEGEND, cellBlocks } from "./map.js";
+import { hudMapOn, setHudMap, legend, cellBlocks } from "./map.js";
 import { cardName, cardDesc, cardIcon, cardColor, bonusSeconds } from "./cards.js";
 import { challengeById } from "./challenges.js";
 
@@ -97,7 +97,7 @@ function mapMenu(player) {
   const lines = game.mapLines(player, CONFIG.menuMapSize);
   const size = CONFIG.playAreaRadius * 2;
   const body = lines.length
-    ? `${lines.join("\n")}\n\n${LEGEND}\n§7${size}x${size} play area · each square is ~${cellBlocks(CONFIG.menuMapSize)} blocks§r`
+    ? `${lines.join("\n")}\n\n${legend(game.state)}\n§7${size}x${size} play area · each square is ~${cellBlocks(CONFIG.menuMapSize)} blocks§r`
     : "The map shows up once a round starts.";
   return menu(player, "Map", body, [["Refresh", () => mapMenu(player), ICON.map], back(player)]);
 }
@@ -198,7 +198,8 @@ function howToPlay(player) {
     "Lock in from the menu. You switch to Survival and are frozen in place (you can still look and use blocks).",
     "",
     "§l2. Seek§r",
-    `Seekers ask questions from the question board (one every ${CONFIG.questionCooldownSeconds}s). ` +
+    `Seekers ask questions from the question board (one every ${CONFIG.questionCooldownSeconds}s), taking turns ` +
+      `in order. Whoever's turn it is gets ${CONFIG.askTurnSeconds}s to ask once a question is ready, or the turn moves on. ` +
       "\"Me\" means the seeker asking, so where you stand matters.",
     "§9Comparing§r and §aDistance§r narrow down the area (the map blacks it out). §eObservation§r asks about " +
       "the hider's surroundings. §cTask§r makes the hider do something that gives them away: a firework, a fire, " +
@@ -208,6 +209,7 @@ function howToPlay(player) {
     `Seekers can teleport from the menu once every ${game.fmt(CONFIG.teleportCooldownSeconds)}, ` +
       "to a teammate or to coordinates, but not into ruled-out areas or during a challenge.",
     "The hider sees every seeker's direction and distance above their hotbar.",
+    "Every new hider's round starts with a fresh map for everyone: old lines and markers are gone.",
     "",
     "§l3. Powerups§r",
     "Every question earns the hider cards (Comparing: draw 3 pick 2 · Distance: draw 2 pick 2 · " +
@@ -302,14 +304,19 @@ function waitingMenu(player) {
 function seekerMenu(player) {
   const s = game.state;
   const blocked = game.canAsk(player);
+  const turn = game.currentAsker();
+  const order = (s.askOrder ?? []).map((id) => (id === turn ? `§b§l${game.nameOf(id)}§r` : game.nameOf(id))).join(" → ");
   const body = [
     `§7Hider:§r ${game.nameOf(game.hiderId())}    §7Time:§r ${game.fmt(s.hiderSeconds)}`,
     `§7Questions asked:§r ${s.clues.length}    §7Hider's cards:§r ${s.hand.length}/${CONFIG.handSize}`,
+    `§7Asking order:§r ${order}`,
     ...statusLines(),
-    blocked ? `§7${blocked}§r` : "§a§lYou can ask a question!§r",
+    blocked ? `§7${blocked}§r` : "§a§lYour turn: ask a question!§r",
   ].join("\n");
+  const pass = turn === player.id ? [["Pass my turn to ask", () => game.passTurn(player), ICON.back]] : [];
   return menu(player, "Seeker", body, [
     ["§l§9Questions§r\n§8the question board", () => boardMenu(player), ICON.questions],
+    ...pass,
     [`§lClues§r §8(${s.clues.length})`, () => cluesMenu(player), ICON.clues],
     [`§l§5Teleport§r\n§8${game.canTeleport(player) ?? "ready"}`, () => teleportMenu(player), ICON.teleport],
     ...mapButtons(player),

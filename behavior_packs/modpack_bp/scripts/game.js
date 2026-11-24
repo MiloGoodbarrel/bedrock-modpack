@@ -7,6 +7,8 @@ import * as disguise from "./disguise.js";
 import * as bots from "./bots.js";
 import * as map from "./map.js";
 import * as powerups from "./powerups.js";
+import * as terrain from "./terrain.js";
+import * as skylines from "./skylines.js";
 import { bonusSeconds } from "./cards.js";
 import { challengeById } from "./challenges.js";
 
@@ -53,6 +55,9 @@ function freshState(players = []) {
     pending: null, // a question waiting out the hider's Cancel window
     challenge: null, // { id, left, baseline, botLeft } while seekers must complete a challenge
     tp: {}, // player id -> seconds until they can teleport again
+    askOrder: [], // seeker ids taking turns to ask (round robin)
+    askTurn: 0, // index into askOrder of whose turn it is
+    askIdle: 0, // seconds the current asker has had a question ready without asking
     // Bot state (see bots.js)
     bots: {},
     botHide: null,
@@ -264,6 +269,27 @@ export function giveMenuItem(player) {
   inv.addItem(item);
 }
 
+/**
+ * Swaps the player's maps for one fresh empty locator map, so every hider's round starts with a blank map
+ * (old lines and markers are drawn into map items and would otherwise stay).
+ */
+function freshMap(player) {
+  try {
+    player.runCommand("clear @s filled_map");
+  } catch {}
+  try {
+    player.runCommand("clear @s empty_map");
+  } catch {}
+  try {
+    player.runCommand("give @s empty_map 1 2"); // data 2 = empty locator map (shows player markers)
+    tell(
+      player,
+      "§7New round, new map: use your empty locator map to start it, then hold it in your off hand. " +
+        "Red lines in the sky show up on it, marking where the hider can still be."
+    );
+  } catch {}
+}
+
 /** Called when a player (re)joins the world. */
 export function onPlayerSpawn(player) {
   giveMenuItem(player);
@@ -362,6 +388,12 @@ function startTurn(turn) {
   state.pending = null;
   state.challenge = null;
   state.tp = {};
+  // Seekers take turns asking, in join order, starting with a different seeker each round.
+  const seekers = state.players.map((p) => p.id).filter((pid) => pid !== state.order[turn]);
+  const shift = seekers.length ? turn % seekers.length : 0;
+  state.askOrder = [...seekers.slice(shift), ...seekers.slice(0, shift)];
+  state.askTurn = 0;
+  state.askIdle = 0;
   bots.onTurnStart();
 
   const id = hiderId();
@@ -384,6 +416,7 @@ function startTurn(turn) {
         p.teleport(state.center, { dimension });
       } catch {}
     }
+    if (CONFIG.giveMaps) freshMap(p);
   }
   titleAll(`§e${nameOf(id)} is hiding`, `Round ${turn + 1} of ${state.order.length}`);
 }
@@ -516,9 +549,52 @@ export function canAsk(player) {
   if (!isSeeker(player)) return "Only seekers can ask questions.";
   const blocked = powerups.blockedReason();
   if (blocked) return blocked;
+  const turn = currentAsker();
+  if (turn && turn !== player.id) return `It's ${nameOf(turn)}'s turn to ask.`;
   if (state.cooldown > 0) return `Next question in ${fmt(state.cooldown)}.`;
   if (!hiderTarget()) return "The hider is offline.";
   return undefined;
+}
+
+function canTakeTurn(id) {
+  return isBotId(id) || !!getPlayer(id);
+}
+
+/** Whose turn it is to ask (skipping seekers who are offline), or undefined if nobody can. */
+export function currentAsker() {
+  const order = state.askOrder ?? [];
+  for (let i = 0; i < order.length; i++) {
+    const id = order[(state.askTurn + i) % order.length];
+    if (canTakeTurn(id)) {
+      if (i) state.askTurn = (state.askTurn + i) % order.length;
+      return id;
+    }
+  }
+  return undefined;
+}
+
+/** Passes the question turn to the next seeker. */
+export function advanceAsker() {
+  const order = state.askOrder ?? [];
+  if (!order.length) return;
+  state.askTurn = (state.askTurn + 1) % order.length;
+  state.askIdle = 0;
+  currentAsker(); // skip anyone offline
+  const next = currentAsker();
+  if (!next) return;
+  const p = getPlayer(next);
+  if (p) {
+    try {
+      p.onScreenDisplay.setTitle(" ", { subtitle: "§bYour turn to ask a question", fadeInDuration: 5, stayDuration: 40, fadeOutDuration: 10 });
+    } catch {}
+  }
+}
+
+/** Ends the current asker's turn early (they don't want to ask). */
+export function passTurn(player) {
+  if (state.phase !== "seeking" || currentAsker() !== player.id) return;
+  broadcast(`§7${player.name} passed their turn to ask.`);
+  advanceAsker();
 }
 
 /** A person asks a question from the board. Used questions can be asked again for double hider powerups. */
@@ -838,9 +914,12 @@ function actionBar(player, text) {
 /** Runs once per second. */
 export function tickSecond() {
   if (!loaded) return;
+  skylines.tick(state);
   if (state.phase === "hiding" || state.phase === "seeking" || state.phase === "between") {
     forceCoordinates();
     enforceBorder();
+    const gameId = state.gameId;
+    terrain.ensureScan(state, () => state.gameId === gameId && state.phase !== "lobby" && state.phase !== "ended");
   }
   switch (state.phase) {
     case "hiding":
@@ -911,15 +990,32 @@ function tickSeeking() {
     const radar = seekerRadar(hider);
     actionBar(hider, `§aHidden for ${fmt(currentScore())}${cardsText}${pick}${radar ? `\n${radar}` : ""}`);
   }
+  // Round-robin asking: a seeker who sits on a ready question too long loses their turn.
+  const asker = currentAsker();
+  const ready = !state.challenge && !state.pending && state.cooldown <= 0;
+  if (ready && asker && !isBotId(asker)) {
+    if (++state.askIdle >= CONFIG.askTurnSeconds) {
+      broadcast(`§7${nameOf(asker)} took too long and missed their turn to ask.`);
+      advanceAsker();
+    }
+  } else {
+    state.askIdle = 0;
+  }
+
   const ch = activeChallenge();
-  const q = ch
-    ? `§6CHALLENGE: ${ch.name} §7(${fmt(state.challenge.left)})`
-    : state.pending
-      ? "§7waiting for the hider..."
-      : state.cooldown > 0
-        ? `§7next question in ${fmt(state.cooldown)}`
-        : "§aquestion ready";
-  for (const p of onlineSeekers()) actionBar(p, `§eSeeking ${nameOf(id)} §f${fmt(state.hiderSeconds)}  ${q}`);
+  for (const p of onlineSeekers()) {
+    const mine = currentAsker() === p.id;
+    const q = ch
+      ? `§6CHALLENGE: ${ch.name} §7(${fmt(state.challenge.left)})`
+      : state.pending
+        ? "§7waiting for the hider..."
+        : state.cooldown > 0
+          ? `§7next question in ${fmt(state.cooldown)}${mine ? " §b(your turn next)" : ""}`
+          : mine
+            ? `§a§lyour turn to ask! §r§7(${fmt(CONFIG.askTurnSeconds - state.askIdle)})`
+            : `§7${nameOf(currentAsker())}'s turn to ask`;
+    actionBar(p, `§eSeeking ${nameOf(id)} §f${fmt(state.hiderSeconds)}  ${q}`);
+  }
   bots.tickSecond();
 }
 
