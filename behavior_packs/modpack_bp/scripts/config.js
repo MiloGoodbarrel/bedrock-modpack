@@ -25,6 +25,10 @@ export const CONFIG = {
   playAreaRadius: 500,
   // A seeker "finds" the hider by looking straight at them, unobstructed, within this range.
   spotDistance: 24,
+  // "Sustained sight" capture mode (admin setting): checks in a row (5 per second) the hider must stay in view.
+  sustainedSightChecks: 5,
+  // How often each powerup card is drawn (relative weights). The original mod's odds aren't known.
+  cardWeights: { time3: 25, time5: 14, time10: 6, cancel: 12, challenge: 20 },
   // Locked-in hiders can't walk (looking around and using blocks still works). As a backup, a hider who
   // ends up further than this from their spot (pushed, knocked back, or walking isn't lockable) is put back.
   hiderLeash: 0.4,

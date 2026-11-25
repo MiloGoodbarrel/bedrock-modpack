@@ -12,6 +12,7 @@ import { findQuestion } from "./questions.js";
 import { flatPos } from "./rules.js";
 import * as cards from "./cards.js";
 import * as handRules from "./hand.js";
+import * as terrain from "./terrain.js";
 import { challengeById, itemCount, unattainableChallenges } from "./challenges.js";
 import * as game from "./game.js";
 
@@ -156,7 +157,8 @@ export function playCancel(player, token) {
  */
 function takenChallenges() {
   const s = game.state;
-  return [...(s.usedChallenges ?? []), ...unattainableChallenges(s.rules), ...hand(), ...(s.offer?.cards ?? [])]
+  const unattainable = unattainableChallenges(s.rules, terrain.hasWater(s));
+  return [...(s.usedChallenges ?? []), ...unattainable, ...hand(), ...(s.offer?.cards ?? [])]
     .map((c) => (typeof c === "string" ? c : c.type === "challenge" ? c.challenge : undefined))
     .filter(Boolean);
 }
@@ -229,50 +231,21 @@ export function playChallenge(player, cardId) {
   game.save();
 }
 
-function completeChallenge(byName) {
+/** Ends the active challenge as completed (called by challengewatch.js when a seeker does it). */
+export function completeChallenge(byName) {
   const s = game.state;
-  const ch = challengeById(s.challenge?.id);
+  if (!s.challenge) return; // already completed (two detections in the same moment)
+  const ch = challengeById(s.challenge.id);
   s.challenge = null;
   game.broadcast(`§a${byName} completed the challenge${ch ? ` "${ch.name}"` : ""}! Questions are open again.`);
   announce("§aChallenge complete!", `${byName} did it`);
   game.save();
 }
 
-function activeChallenge() {
+/** The active challenge's definition, during seeking. */
+export function activeChallenge() {
   const s = game.state;
   return s.phase === "seeking" && s.challenge ? challengeById(s.challenge.id) : undefined;
-}
-
-/** Entity spawned in the world (breeding, golems, TNT...). */
-export function onSpawn(entity, cause) {
-  const ch = activeChallenge();
-  if (!ch?.spawn) return;
-  let ok = false;
-  try {
-    ok = ch.spawn(entity, cause);
-  } catch {}
-  if (!ok) return;
-  for (const p of world.getAllPlayers()) {
-    if (!game.isSeeker(p) || p.dimension.id !== entity.dimension.id) continue;
-    const l = entity.location;
-    if (Math.hypot(p.location.x - l.x, p.location.y - l.y, p.location.z - l.z) <= 24) return completeChallenge(p.name);
-  }
-}
-
-/** A player used an item on a block (bone meal, water bottles...). */
-export function onUseOnBlock(player, block, item) {
-  const ch = activeChallenge();
-  if (!ch || !game.isSeeker(player)) return;
-  if (ch.useItem && item?.typeId === ch.useItem) return completeChallenge(player.name);
-  if (ch.blockAfter) {
-    const loc = block.location;
-    const dim = block.dimension;
-    system.runTimeout(() => {
-      try {
-        if (activeChallenge() === ch && dim.getBlock(loc)?.typeId === ch.blockAfter) completeChallenge(player.name);
-      } catch {}
-    }, 2);
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -292,17 +265,9 @@ export function tickSecond() {
   // Hands saved by older versions could be oversized: repair them.
   if (hand().length > CONFIG.handSize) handRules.trim(hand(), CONFIG.handSize, cards.cardValue);
 
+  // (Seekers completing the challenge is detected in challengewatch.js.)
   const ch = activeChallenge();
   if (ch) {
-    for (const p of world.getAllPlayers()) {
-      if (!game.isSeeker(p)) continue;
-      if (ch.dimension && p.dimension.id === ch.dimension) return completeChallenge(p.name);
-      if (ch.items) {
-        const have = itemCount(p, ch.items);
-        if (s.challenge.baseline[p.id] === undefined) s.challenge.baseline[p.id] = have;
-        else if (have > s.challenge.baseline[p.id]) return completeChallenge(p.name);
-      }
-    }
     // Bots can't really fish or breed chickens: with no people seeking, a bot "does it" after a while.
     if (!game.humanSeekersOnline() && --s.challenge.botLeft <= 0) {
       const bot = s.players.find((p) => p.bot && p.id !== game.hiderId());

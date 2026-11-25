@@ -25,7 +25,7 @@ not confirmed) · **Bedrock adaptation** (same idea, different mechanism because
 | Score = hide time + bonus cards − overtime, highest total wins | verified reference | Totals add up across rotations |
 | Rotations at new random locations | original extension | Requested by the project owner |
 | Overworld only | original extension | Nether/End options removed by request |
-| Capture by line of sight (24 blocks) or hit | Bedrock adaptation | Range is an approximation; configurable |
+| Capture by line of sight (24 blocks) or hit | Bedrock adaptation | Admin presets: sight-or-hit (default), sustained sight (1s), hit only. Range is an approximation; configurable |
 
 ## Questions
 
@@ -35,7 +35,7 @@ not confirmed) · **Bedrock adaptation** (same idea, different mechanism because
 | Distance 500/250/100/50/25, horizontal | verified reference | |
 | Observation (9) | inferred reference | Grass, leaves, same block, water 4, lava 6, snow 4, flowers 4, mobs 16, sky. Cube scan; original metric unknown; unloaded areas answer "Unknown" |
 | Generated-structure question | missing | No reliable structure detection in the stable API; not faked |
-| Task (8) | Bedrock adaptation | Performed automatically next to the hider so it can't be skipped; reference count about 12 |
+| Task (8) | Bedrock adaptation | Performed automatically next to the hider so it can't be skipped; only ever fills empty air and only reports success if it really happened; reference count about 12 (rest unidentified) |
 | Each question once per round | original extension | **Intentional deviation from the spec**: the spec has repeats doubling rewards; the project owner chose once-only |
 | Round-robin asking | original extension | |
 
@@ -56,12 +56,12 @@ not confirmed) · **Bedrock adaptation** (same idea, different mechanism because
 |---|---|---|
 | Draw/pick per category (3/2, 2/2, 2/1, 1/1) | verified reference | |
 | 5-card hand, forced discard | verified reference | Hand can never exceed 5 (discard happens in the same step); tested |
-| Time bonus 3/5/10 | verified reference | Weights unverified; configurable in `cards.js` |
+| Time bonus 3/5/10 | verified reference | Draw weights unverified; `cardWeights` in config.js |
 | Cancel | verified reference | 10s window is an adaptation |
 | Challenge blocks questions and teleports | verified reference | No timeout by default (owner's choice); configurable |
-| Challenges: fish, mud, breed chickens, hatch chicken, bonemeal, iron golem, TNT | verified reference | Detectors are approximations (P1 backlog); mob-dependent ones skipped in Peaceful |
+| Challenges: fish, mud, breed chickens, hatch chicken, bonemeal, iron golem, TNT | verified reference | Credited to the seeker who did it (`challengewatch.js`): births/hatching/golems/TNT must appear near that seeker's own action; bone meal and mud need a real block change. Fish is still an inventory count (no fishing event). Mob-dependent ones skipped in Peaceful; water-dependent ones skipped when the scan finds no water |
 | Bread challenge | original extension | |
-| Light a Nether portal, fall 100 blocks, break an iron tool | missing | P1 backlog |
+| Light a Nether portal, fall 100 blocks, break an iron tool | verified reference | Added in P1. Portal: lighting only (Overworld-only game). Fall: tracked per seeker, teleports and deaths excluded (`trackers.js`, tested). Tool: the API has no item-break event, so a nearly broken iron tool vanishing from the held slot counts (dropping it at that moment would too) |
 
 ## Morphs
 
@@ -80,3 +80,18 @@ not confirmed) · **Bedrock adaptation** (same idea, different mechanism because
 | P0.3 Dry and sky-light rules | Done. Lava always rejected; sky layer ignored by rules (`surface.js`); unloaded scans answer "Unknown" |
 | P0.4 Teleport validation | Done. One destination check for coordinates, teammates and bots; delayed landing re-checks the round |
 | P0.5 World edits and morph restoration | Done. Disguise block only replaces air/water/small plants and restores the original; failed spawn/placement leaves the hider undisguised (not invisible/spectating); leftover ticking areas removed on load |
+
+## P1 status (spec batch 2)
+
+| Item | Result |
+|---|---|
+| Missing challenges (portal, fall 100, break iron tool) | Done (see Cards). Fall and tool trackers are pure functions with tests |
+| Challenge false positives | Done where the API can attribute it: actor-attributed births, hatching, golems and TNT; real block changes for bone meal, mud and portals. Fish and bread remain inventory counts (documented) |
+| Impossible challenges on the arena | Done for what can be known: mob drops in Peaceful, water from the finished terrain scan. Other terrain needs (e.g. no chickens nearby) aren't detectable |
+| Task safety | Done: tasks only fill empty air and report failure honestly |
+| Card weights | Configurable (`cardWeights`); still unverified against the original |
+| Capture presets | Done: sight-or-hit, sustained sight, hit only (manual confirmation not added) |
+| Generated-structure question | Not added: the pinned stable API (2.0.0) has no structure lookup, and `/locate` output can't be read from scripts |
+| Biome/elevation map filtering | Not added: biome needs loaded chunks everywhere, and elevation is unreliable with player-built spots. The map only uses x/z clues, which is always correct |
+| Cancelled questions | Count as used and earn no powerups. Unverified against the original |
+| Separate pig/cow/sheep/rabbit task buttons | Not added: not confirmed in the reference |

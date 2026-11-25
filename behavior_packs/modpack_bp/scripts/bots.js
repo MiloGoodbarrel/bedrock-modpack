@@ -700,8 +700,9 @@ function sees(b, target) {
   const dz = t.z - b.z;
   const flat = hyp(dx, dz);
   if (flat <= CONFIG.botTouchRange && Math.abs(t.y - b.y) <= 2.5) return true;
-  // A disguised hider looks like any other mob or block: bots have to walk up and poke it.
-  if (s.disguise?.applied) return false;
+  // A disguised hider looks like any other mob or block, and in "hit only" capture mode sight never counts:
+  // bots have to walk up and poke it.
+  if (s.disguise?.applied || s.rules?.captureMode === "hit") return false;
 
   if (flat > 0.01) {
     const yaw = (b.look * Math.PI) / 180;
@@ -782,7 +783,8 @@ export function tickFast(target) {
     if (!e) continue;
     stepPhysical(b, e, d);
     if (target && sees(b, target)) {
-      if (++b.sight >= CONFIG.botSightChecks) return game.found({ name: game.nameOf(id) });
+      const need = game.state.rules?.captureMode === "sustained" ? Math.max(CONFIG.botSightChecks, CONFIG.sustainedSightChecks) : CONFIG.botSightChecks;
+      if (++b.sight >= need) return game.found({ name: game.nameOf(id) });
     } else {
       b.sight = 0;
     }
