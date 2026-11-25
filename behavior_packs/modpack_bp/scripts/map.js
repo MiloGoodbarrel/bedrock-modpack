@@ -1,10 +1,10 @@
 // Text minimap of the play area. Bedrock scripts can't draw map textures, so the map is a grid of colored
 // squares: each cell is darkened once the answers so far rule it out, like the blackout map in the original mod.
-// North is up. Used both in the menu (big) and on the HUD action bar (small).
+// North is up. Shown from the Map button in the menu.
 import { world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
-import { findQuestion } from "./questions.js";
 import { flatPos } from "./rules.js";
+import { constraintsFrom, allOk, classifyGrid } from "./geometry.js";
 import * as terrain from "./terrain.js";
 
 const CELL = "■";
@@ -13,74 +13,28 @@ const CELL = "■";
 const PLAIN = { in: "§2", part: "§6", out: "§8" };
 const OVER_TERRAIN = { part: "§8", out: "§0" };
 const DOT = { me: "§d", seeker: "§5", bot: "§3", hider: "§4" };
-const HUD_KEY = "hs:hudmap";
-
-/** Per-player HUD minimap toggle (on by default). */
-export function hudMapOn(player) {
-  try {
-    return player.getDynamicProperty(HUD_KEY) !== false;
-  } catch {
-    return true;
-  }
-}
-
-export function setHudMap(player, on) {
-  try {
-    player.setDynamicProperty(HUD_KEY, on);
-  } catch {}
-}
-
-function planarChecks(clues) {
-  return clues
-    .filter((c) => c.qid && c.from && !c.cancelled)
-    .map((c) => ({ c, q: findQuestion(c.qid)?.question }))
-    .filter((x) => x.q?.planar);
-}
-
-function possible(x, z, checks) {
-  const hider = { location: { x, y: 0, z } };
-  for (const { c, q } of checks) {
-    if (q.answer({ location: c.from }, hider) !== c.answer) return false;
-  }
-  return true;
-}
 
 /** True if the answers so far still allow the hider to be at x/z (overworld-equivalent coordinates). */
 export function possibleAt(state, x, z) {
-  return possible(x, z, planarChecks(state.clues));
+  return allOk(constraintsFrom(state.clues), x, z);
 }
 
 /** Same as possibleAt, as a reusable function for checking many points against the current clues. */
 export function possibleFn(state) {
-  const checks = planarChecks(state.clues);
-  return (x, z) => possible(x, z, checks);
+  const cs = constraintsFrom(state.clues);
+  return (x, z) => allOk(cs, x, z);
 }
 
 let cache = { key: "", grid: null };
 
-/** size x size grid of "in" | "part" | "out", cached until a new clue arrives. */
+/**
+ * size×size grid of "in" | "part" | "out", cached until a new clue arrives. Conservative (geometry.js): a
+ * cell is only "out" when it's proven that no point in it fits every answer.
+ */
 function grid(state, size) {
-  const key = `${state.gameId}:${state.turn}:${state.clues.length}:${size}`;
+  const key = `${state.gameId}:${state.cycle ?? 0}:${state.turn}:${state.clues.length}:${size}:${state.center.x},${state.center.z}`;
   if (cache.key === key) return cache.grid;
-  const checks = planarChecks(state.clues);
-  const r = CONFIG.playAreaRadius;
-  const cell = (2 * r) / size;
-  const x0 = state.center.x - r;
-  const z0 = state.center.z - r;
-  const rows = [];
-  for (let row = 0; row < size; row++) {
-    const line = [];
-    for (let col = 0; col < size; col++) {
-      let ok = 0;
-      for (const fx of [0.17, 0.5, 0.83]) {
-        for (const fz of [0.17, 0.5, 0.83]) {
-          if (possible(x0 + (col + fx) * cell, z0 + (row + fz) * cell, checks)) ok++;
-        }
-      }
-      line.push(ok === 9 ? "in" : ok === 0 ? "out" : "part");
-    }
-    rows.push(line);
-  }
+  const rows = classifyGrid(constraintsFrom(state.clues), state.center.x, state.center.z, CONFIG.playAreaRadius, size);
   cache = { key, grid: rows };
   return rows;
 }

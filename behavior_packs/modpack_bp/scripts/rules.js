@@ -1,5 +1,6 @@
 import { CONFIG } from "./config.js";
-import { neighbourTypes } from "./disguise.js";
+import { surfaceBlock } from "./surface.js";
+import { neighbourTypes, roomForBlock } from "./disguise.js";
 
 const OVERWORLD = "minecraft:overworld";
 const NETHER = "minecraft:nether";
@@ -20,6 +21,9 @@ function blockAt(dimension, location) {
   }
 }
 
+// Lava is never a valid spot, even when the admin allows hiding in water (no "hide in lava" cheese).
+const LAVA_BLOCKS = new Set(["minecraft:lava", "minecraft:flowing_lava"]);
+
 function isWet(block) {
   if (!block) return false;
   if (WET_BLOCKS.has(block.typeId)) return true;
@@ -28,6 +32,10 @@ function isWet(block) {
   } catch {
     return false;
   }
+}
+
+function isLava(block) {
+  return !!block && LAVA_BLOCKS.has(block.typeId);
 }
 
 function nearSkyLight(player) {
@@ -40,7 +48,7 @@ function nearSkyLight(player) {
     for (let dz = -r; dz <= r; dz++) {
       let top;
       try {
-        top = dimension.getTopmostBlock({ x: bx + dx, z: bz + dz });
+        top = surfaceBlock(dimension, { x: bx + dx, z: bz + dz });
       } catch {
         continue; // unloaded column
       }
@@ -65,8 +73,9 @@ export function flatPos(entity) {
   return { x: l.x, y: l.y, z: l.z };
 }
 
-export function dimensionAllowed(dimId, opts) {
-  return dimId === OVERWORLD || (dimId === NETHER && !!opts.allowNether) || (dimId === END && !!opts.allowEnd);
+/** Games are Overworld-only (the Nether and End options were removed). */
+export function dimensionAllowed(dimId) {
+  return dimId === OVERWORLD;
 }
 
 /**
@@ -81,16 +90,19 @@ export function checkSpotRules(player, center, opts = {}, disguise = undefined) 
   const y = Math.floor(location.y);
 
   const rules = [{ label: "On Ground", ok: player.isOnGround }];
-  if (!opts.allowWater) rules.push({ label: "Dry", ok: !player.isInWater && !isWet(feet) && !isWet(head) });
+  const lava = isLava(feet) || isLava(head);
+  if (!opts.allowWater) rules.push({ label: "Dry", ok: !player.isInWater && !isWet(feet) && !isWet(head) && !lava });
+  else rules.push({ label: "Not in Lava", ok: !lava });
   if (dimId === OVERWORLD) rules.push({ label: "Above Sea Level", ok: y >= CONFIG.seaLevel });
   if (dimId !== NETHER) rules.push({ label: "Near Sky Light", ok: nearSkyLight(player) }); // the Nether has no sky
   if (opts.maxY) rules.push({ label: `Below Y ${opts.maxY}`, ok: y <= opts.maxY });
-  if (dimId !== OVERWORLD) rules.push({ label: "Allowed Dimension", ok: dimensionAllowed(dimId, opts) });
+  if (dimId !== OVERWORLD) rules.push({ label: "In the Overworld", ok: dimensionAllowed(dimId) });
   if (dimId !== END) rules.push({ label: "Inside Play Area", ok: insidePlayArea(flatPos(player), center) });
   if (opts.morph) {
     if (!disguise) rules.push({ label: "Pick a Disguise", ok: false });
     else if (disguise.kind === "block") {
       rules.push({ label: "Unlike Neighbours", ok: !neighbourTypes(dimension, location).includes(disguise.type) });
+      rules.push({ label: "Room for the Block", ok: roomForBlock(dimension, location) });
     }
   }
   return rules;

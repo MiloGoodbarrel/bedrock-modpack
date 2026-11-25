@@ -4,6 +4,7 @@
 // started from the same spot.
 import { world, system } from "@minecraft/server";
 import { CONFIG } from "./config.js";
+import { surfaceBlock } from "./surface.js";
 
 const KEY = "hs:terrain";
 const AREA = "hs_scan";
@@ -79,7 +80,7 @@ export function colorAt(state, x, z) {
 function classify(dim, x, z) {
   let b;
   try {
-    b = dim.getTopmostBlock({ x, z });
+    b = surfaceBlock(dim, { x, z });
   } catch {
     return undefined;
   }

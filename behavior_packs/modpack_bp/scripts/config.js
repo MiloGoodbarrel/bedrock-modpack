@@ -9,12 +9,14 @@ export const CONFIG = {
   // Seekers take turns asking (round robin). Once a question is ready, the seeker whose turn it is has this
   // long to ask before the turn passes to the next seeker.
   askTurnSeconds: 60,
-  // Hider powerups: hand limit, how long the hider has to play Cancel on a question, how long they have to
-  // pick cards before the best ones are picked for them, and how long a challenge lasts before it times out.
+  // Hider powerups: hand limit, how long the hider has to play Cancel on a question, and how long they have to
+  // pick cards before the best ones are picked for them.
   handSize: 5,
   cancelWindowSeconds: 10,
   offerSeconds: 45,
-  challengeSeconds: 300,
+  // A challenge blocks all questions (and teleports) until a seeker completes it. 0 = no time limit; set a
+  // number of seconds to let challenges expire instead.
+  challengeSeconds: 0,
   // Hider rule: "Above Sea Level" means feet at or above this Y.
   seaLevel: 63,
   // Hider rule: "Near Sky Light" checks columns within this many blocks for open sky.
@@ -28,6 +30,15 @@ export const CONFIG = {
   hiderLeash: 0.4,
   // Delay between one hider being found and the next hiding phase starting.
   betweenRoundsSeconds: 8,
+  // Native locator bar for the hider only: the bar is turned on during games and the hider wears a locked
+  // player head, which (like in Java) should hide them from other players' bars. If seekers can still see
+  // the hider on their bar, set this to false: the bar is then off for everyone during games.
+  hiderLocatorBar: true,
+  hiderHeadItem: "minecraft:player_head",
+  // Rotations (admin setting): after everyone has hidden, everyone moves to a new random location this far from
+  // the old start point (far enough that the new play area doesn't overlap the old one).
+  relocateMinDistance: 1500,
+  relocateMaxDistance: 3000,
   // Seekers can teleport (menu → Teleport) once per this many seconds, never into ruled-out areas or during a
   // challenge.
   teleportCooldownSeconds: 60,
@@ -36,21 +47,24 @@ export const CONFIG = {
   border: true,
   borderWarnDistance: 12,
   borderParticle: "minecraft:villager_happy",
-  // Red lines in the sky outlining where the hider can still be, so they show on real map items. Drawn near
-  // players at skyLineY, skyLineWidth blocks wide (wider shows better on zoomed-out maps), a few chunks per
-  // second. Everyone gets an empty locator map when a game starts.
+  // Red lines at build height outlining where the hider can still be, so they show on real map items. Drawn
+  // near players, skyLineWidth blocks wide (wider shows better on zoomed-out maps), a few chunks per second.
+  // Everyone gets a fresh empty locator map each round.
   skyLines: true,
-  skyLineY: 316,
+  // Height for the sky lines and fill. null = build height (the top block the world allows, Y 319 normally).
+  skyLineY: null,
   skyLineWidth: 4,
-  skyLineBlock: "minecraft:red_wool",
+  // Red wool top slab (lets light through); full red wool if this game version has no wool slabs.
+  skyLineBlock: "minecraft:red_wool_slab",
+  skyLineStates: { "minecraft:vertical_half": "top" },
+  skyLineFallback: "minecraft:red_wool",
   skyLineChunksPerSecond: 8,
   giveMaps: true,
   // Scan the play area's terrain in the background so the map shows water, forests, snow... (saved per start
   // point). terrainGrid samples per side: 25 = one sample every 40 blocks on a 1000-block area.
   terrainScan: true,
   terrainGrid: 25,
-  // Minimap grid sizes (cells per side): the small one above the hotbar and the big one in the menu.
-  hudMapSize: 9,
+  // Menu map grid size (cells per side).
   menuMapSize: 15,
 
   // --- Bots ----------------------------------------------------------------

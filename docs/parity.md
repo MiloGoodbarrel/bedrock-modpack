@@ -1,0 +1,82 @@
+# Parity matrix
+
+Tracks how Extreme Hide & Seek compares to EightSidedSquare's Java Hide and Seek mod, as seen in the reference
+videos (see [game-rules.md](game-rules.md)). Maintained alongside `BEDROCK_PARITY_SPEC.md` work.
+
+**Nothing in this add-on has been validated in game yet.** Every row is also *runtime unverified* until a
+playtest confirms it. "Tested" below means the pure-JS unit tests in `tests/` (run in a browser, since this
+machine has no Node.js).
+
+Statuses: **verified reference** (seen clearly in a video) · **inferred reference** (likely from the videos,
+not confirmed) · **Bedrock adaptation** (same idea, different mechanism because of Bedrock limits) ·
+**original extension** (not in the reference) · **missing**.
+
+## Core
+
+| Feature | Status | Notes |
+|---|---|---|
+| Lobby, everyone hides once per rotation | verified reference | |
+| 5-minute Creative build phase, manual lock-in | verified reference | |
+| Overtime penalty, 60 score-seconds per second late | inferred reference | Video house rule; configurable |
+| Stationary hider after lock-in | verified reference | Movement input lock plus a 0.4-block snap-back |
+| Hider keeps Creative after lock-in | original extension | Requested by the project owner |
+| Spot rules: ground, dry, above sea level, near sky light | verified reference | Sky light is a geometric check (no light API in the pinned Script API 2.0.0); lava always rejected |
+| 1000×1000 arena | inferred reference | From "within 500 blocks" being useful; configurable |
+| Score = hide time + bonus cards − overtime, highest total wins | verified reference | Totals add up across rotations |
+| Rotations at new random locations | original extension | Requested by the project owner |
+| Overworld only | original extension | Nether/End options removed by request |
+| Capture by line of sight (24 blocks) or hit | Bedrock adaptation | Range is an approximation; configurable |
+
+## Questions
+
+| Feature | Status | Notes |
+|---|---|---|
+| Comparing: N/S, E/W, above/below, same biome | verified reference | Reference shows about 6; the other 2 are unidentified |
+| Distance 500/250/100/50/25, horizontal | verified reference | |
+| Observation (9) | inferred reference | Grass, leaves, same block, water 4, lava 6, snow 4, flowers 4, mobs 16, sky. Cube scan; original metric unknown; unloaded areas answer "Unknown" |
+| Generated-structure question | missing | No reliable structure detection in the stable API; not faked |
+| Task (8) | Bedrock adaptation | Performed automatically next to the hider so it can't be skipped; reference count about 12 |
+| Each question once per round | original extension | **Intentional deviation from the spec**: the spec has repeats doubling rewards; the project owner chose once-only |
+| Round-robin asking | original extension | |
+
+## Map
+
+| Feature | Status | Notes |
+|---|---|---|
+| Blackout of ruled-out area | Bedrock adaptation | Menu grid + sky layer on real map items. **Conservative**: a cell is only blacked out when proven impossible (`geometry.js`, tested) |
+| Map never shows the hider to seekers | Bedrock adaptation | Seekers get plain maps, compasses confiscated; hider gets a locator map |
+| Fresh map every hider's round | original extension | **Intentional**: deletes players' maps each round, by owner's request (`giveMaps` in config.js) |
+| Terrain on the map | Bedrock adaptation | Background scan; reference map shows biomes |
+| Clickable map teleport | Bedrock adaptation | Coordinates/teammate/start point via menu, same validation on every path |
+| Sky outline/fill at build height | original extension | Only places into air; only removes its own block types at that height; stale chunks tracked and cleaned |
+
+## Cards
+
+| Feature | Status | Notes |
+|---|---|---|
+| Draw/pick per category (3/2, 2/2, 2/1, 1/1) | verified reference | |
+| 5-card hand, forced discard | verified reference | Hand can never exceed 5 (discard happens in the same step); tested |
+| Time bonus 3/5/10 | verified reference | Weights unverified; configurable in `cards.js` |
+| Cancel | verified reference | 10s window is an adaptation |
+| Challenge blocks questions and teleports | verified reference | No timeout by default (owner's choice); configurable |
+| Challenges: fish, mud, breed chickens, hatch chicken, bonemeal, iron golem, TNT | verified reference | Detectors are approximations (P1 backlog); mob-dependent ones skipped in Peaceful |
+| Bread challenge | original extension | |
+| Light a Nether portal, fall 100 blocks, break an iron tool | missing | P1 backlog |
+
+## Morphs
+
+| Feature | Status | Notes |
+|---|---|---|
+| Mob morph | Bedrock adaptation | Invisible hider + pinned decoy; decoy is spawned first, so no invisible-without-decoy state |
+| Block morph | Bedrock adaptation | Block placed at feet, hider in Spectator; original block saved and restored; must differ from all 6 neighbours |
+| Capture by hitting/mining | verified reference | |
+
+## P0 status (spec batch 1)
+
+| Item | Result |
+|---|---|
+| P0.1 Conservative map elimination | Done. Shared constraints in `geometry.js` used by the map, sky layer, teleports and bots; tested (including a check that the old 9-sample method fails) |
+| P0.2 Atomic hand and scoring | Done. `hand.js`; offers merge instead of overwrite; stale/unauthorized card actions ignored; bonus capped; tested |
+| P0.3 Dry and sky-light rules | Done. Lava always rejected; sky layer ignored by rules (`surface.js`); unloaded scans answer "Unknown" |
+| P0.4 Teleport validation | Done. One destination check for coordinates, teammates and bots; delayed landing re-checks the round |
+| P0.5 World edits and morph restoration | Done. Disguise block only replaces air/water/small plants and restores the original; failed spawn/placement leaves the hider undisguised (not invisible/spectating); leftover ticking areas removed on load |

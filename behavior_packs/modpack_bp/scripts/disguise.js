@@ -124,23 +124,66 @@ export function removeDecoys(keepId) {
   }
 }
 
-/** Places the disguise block at the hider's feet. */
-export function placeBlock(dimension, loc, typeId) {
-  const perm = blockPermutation(typeId);
-  if (!perm) return false;
+// What a disguise block may replace: open space, water, and small plants / snow layers. Never lava, and never
+// anything solid someone built or placed.
+const HOLDABLE = /(short_grass|tall_grass|fern|flower|tulip|dandelion|poppy|orchid|allium|bluet|daisy|bush|sapling|snow_layer|petals|leaf_litter|wildflowers)/;
+
+function holds(block) {
+  if (!block) return false;
+  if (block.isAir) return true;
+  if (block.typeId === "minecraft:lava" || block.typeId === "minecraft:flowing_lava") return false;
+  return block.isLiquid || HOLDABLE.test(block.typeId);
+}
+
+/** True if a disguise block can go where the hider's feet are (nothing solid there). */
+export function roomForBlock(dimension, loc) {
   try {
-    dimension.getBlock(floorLoc(loc))?.setPermutation(perm);
-    return true;
+    return holds(dimension.getBlock(floorLoc(loc)));
   } catch {
     return false;
   }
 }
 
-/** Removes the disguise block, if it's still there. */
-export function clearBlock(dimension, loc, typeId) {
+/**
+ * Places the disguise block at the hider's feet. Returns a snapshot of what was there before (for restoring),
+ * or undefined if it couldn't be placed (nothing is changed then).
+ */
+export function placeBlock(dimension, loc, typeId) {
+  const perm = blockPermutation(typeId);
+  if (!perm) return undefined;
   try {
     const block = dimension.getBlock(floorLoc(loc));
-    if (block && block.typeId === typeId) block.setType("minecraft:air");
+    if (!holds(block)) return undefined;
+    let states = {};
+    try {
+      states = block.permutation.getAllStates();
+    } catch {}
+    const original = { type: block.typeId, states };
+    block.setPermutation(perm);
+    return block.typeId === typeId ? original : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Puts back what was there before the disguise block, but only if the disguise block is still there (if
+ * someone already broke or replaced it, their change is left alone).
+ */
+export function clearBlock(dimension, loc, typeId, original) {
+  try {
+    const block = dimension.getBlock(floorLoc(loc));
+    if (!block || block.typeId !== typeId) return;
+    let perm;
+    try {
+      if (original?.type) perm = BlockPermutation.resolve(original.type, original.states ?? {});
+    } catch {
+      try {
+        perm = BlockPermutation.resolve(original.type);
+      } catch {}
+    }
+    if (perm) block.setPermutation(perm);
+    else block.setType("minecraft:air");
   } catch {}
 }
 

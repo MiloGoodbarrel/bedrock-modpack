@@ -3,16 +3,24 @@
 // 1. A seeker asks. If the hider holds a Cancel card, the answer waits CONFIG.cancelWindowSeconds so they can
 //    play it (people get a prompt; bot hiders decide on the spot). Otherwise it's answered right away.
 // 2. Task questions make the hider do something that gives them away (fire, firework, bee, blocks...).
-// 3. The hider earns cards: draw N, pick M (per category; doubled for a repeated question). Hand limit
-//    CONFIG.handSize, extras must be discarded.
-// 4. Challenge cards stop all questions until a seeker completes the challenge or it times out.
+// 3. The hider earns cards: draw N, pick M (per category). The hand never holds more than CONFIG.handSize
+//    cards: taking one into a full hand means discarding one in the same step (hand.js).
+// 4. Challenge cards stop all questions until a seeker completes the challenge.
 import { world, system } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 import { findQuestion } from "./questions.js";
 import { flatPos } from "./rules.js";
 import * as cards from "./cards.js";
-import { challengeById, itemCount } from "./challenges.js";
+import * as handRules from "./hand.js";
+import { challengeById, itemCount, unattainableChallenges } from "./challenges.js";
 import * as game from "./game.js";
+
+let offerSeq = 0;
+
+/** True if this player is the current (human) hider during seeking: the only one allowed to touch cards. */
+function isActiveHider(player) {
+  return !!player && game.state.phase === "seeking" && player.id === game.hiderId();
+}
 
 /** Set by ui.js: hooks.offer(player) opens the card picker, hooks.cancel(player) the Cancel prompt. */
 export const hooks = { offer: undefined, cancel: undefined };
@@ -60,8 +68,9 @@ export function ask(asker, questionId) {
   if (!found || !hider) return false;
   const { category, question } = found;
 
-  const repeat = s.used.includes(questionId);
-  if (!repeat) s.used.push(questionId);
+  // Each question (and task) can be asked once per hider's round.
+  if (s.used.includes(questionId)) return false;
+  s.used.push(questionId);
   s.cooldown = CONFIG.questionCooldownSeconds;
   const l = flatPos(asker); // overworld-equivalent, so bots and the map can reuse the clue
   const pending = {
@@ -72,15 +81,11 @@ export function ask(asker, questionId) {
     from: { x: l.x, y: l.y, z: l.z },
     answer: question.answer ? question.answer(asker, hider) : null,
     payload: question.prepare ? question.prepare(asker) : null,
-    repeat,
     left: CONFIG.cancelWindowSeconds,
   };
   s.pending = pending;
   game.advanceAsker(); // round robin: the next seeker asks next
-  game.broadcast(
-    `${category.color}[${category.name}] §f${asker.name}: ${question.text}` +
-      (repeat ? " §7(asked again: double powerups)" : "")
-  );
+  game.broadcast(`${category.color}[${category.name}] §f${asker.name}: ${question.text}`);
 
   if (!hand().some((c) => c.type === "cancel")) {
     resolve(pending.token, false);
@@ -126,19 +131,18 @@ export function resolve(token, cancelled) {
   if (question.perform) announce("§cTask!", answer);
   else announce(`§e${answer}`, `${p.by}: ${p.text}`);
 
-  const mult = p.repeat ? 2 : 1;
-  offer(category.draw * mult, category.pick * mult);
+  offer(category.draw, category.pick);
   game.save();
 }
 
 /** The hider lets the pending question through. */
 export function letThrough(player, token) {
-  if (player.id === game.hiderId()) resolve(token ?? game.state.pending?.token, false);
+  if (isActiveHider(player)) resolve(token ?? game.state.pending?.token, false);
 }
 
-/** The hider plays a Cancel card on the pending question. */
+/** The hider plays a Cancel card on the pending question (a stale token from an old prompt does nothing). */
 export function playCancel(player, token) {
-  if (player.id !== game.hiderId() || !hand().some((c) => c.type === "cancel")) return;
+  if (!isActiveHider(player) || !hand().some((c) => c.type === "cancel")) return;
   resolve(token ?? game.state.pending?.token, true);
 }
 
@@ -146,60 +150,52 @@ export function playCancel(player, token) {
 // Cards
 // ---------------------------------------------------------------------------
 
+/**
+ * Challenges that can't be dealt now: already played, in the hand, in the open offer, or not attainable with
+ * the game's settings (e.g. TNT in Peaceful, where there's no gunpowder).
+ */
+function takenChallenges() {
+  const s = game.state;
+  return [...(s.usedChallenges ?? []), ...unattainableChallenges(s.rules), ...hand(), ...(s.offer?.cards ?? [])]
+    .map((c) => (typeof c === "string" ? c : c.type === "challenge" ? c.challenge : undefined))
+    .filter(Boolean);
+}
+
 function offer(draw, pick) {
   const s = game.state;
-  s.offer = { cards: cards.drawCards(draw), picks: Math.min(pick, draw), age: 0 };
+  const drawn = cards.drawCards(draw, takenChallenges());
+  // A new offer while one is still open is merged into it, so nothing is lost.
+  s.offer = handRules.mergeOffer(s.offer, `${game.roundKey()}:${++offerSeq}`, drawn, pick);
   if (game.isBotId(game.hiderId())) {
     autoFinish();
     return;
   }
   const p = hiderPlayer();
   if (p) {
-    p.sendMessage(`§dYou earned powerups: pick ${s.offer.picks} of ${draw}.`);
+    p.sendMessage(`§dYou earned powerups: pick ${s.offer.picks} of ${s.offer.cards.length}.`);
     hooks.offer?.(p);
   }
 }
 
-export function takeCard(player, cardId) {
+/**
+ * The hider takes an offered card. With a full hand, discardId must be a hand card (thrown away) or the
+ * offered card itself (declined). Stale calls (old offer id, wrong player, round over) do nothing.
+ * Returns the hand.js result ({ ok, reason }).
+ */
+export function takeCard(player, offerId, cardId, discardId) {
   const s = game.state;
-  const o = s.offer;
-  if (!o || player.id !== game.hiderId()) return;
-  const i = o.cards.findIndex((c) => c.id === cardId);
-  if (i < 0) return;
-  hand().push(o.cards.splice(i, 1)[0]);
-  o.picks--;
-  if (o.picks <= 0 || !o.cards.length) s.offer = null;
-  game.save();
+  if (!isActiveHider(player) || !s.offer || s.offer.id !== offerId) return { ok: false, reason: "stale" };
+  const r = handRules.takeCard(hand(), s.offer, cardId, discardId, CONFIG.handSize);
+  if (r.ok && r.offerDone) s.offer = null;
+  if (r.ok) game.save();
+  return r;
 }
 
-export function discardCard(player, cardId) {
-  if (player.id !== game.hiderId()) return;
-  const i = hand().findIndex((c) => c.id === cardId);
-  if (i >= 0) hand().splice(i, 1);
-  game.save();
-}
-
-function trimHand() {
-  const h = hand();
-  while (h.length > CONFIG.handSize) {
-    let worst = 0;
-    h.forEach((c, i) => {
-      if (cards.cardValue(c) < cards.cardValue(h[worst])) worst = i;
-    });
-    h.splice(worst, 1);
-  }
-}
-
-/** Picks the best remaining cards and trims the hand (bot hiders, or a person who keeps closing the picker). */
+/** Picks the best offered cards (never going over the hand limit): bot hiders, or a person who timed out. */
 export function autoFinish() {
   const s = game.state;
-  const o = s.offer;
-  if (o) {
-    const best = [...o.cards].sort((a, b) => cards.cardValue(b) - cards.cardValue(a)).slice(0, o.picks);
-    hand().push(...best);
-    s.offer = null;
-  }
-  trimHand();
+  handRules.autoFinish(hand(), s.offer, CONFIG.handSize, cards.cardValue);
+  s.offer = null;
   game.save();
 }
 
@@ -207,20 +203,28 @@ export function autoFinish() {
 // Challenges
 // ---------------------------------------------------------------------------
 
+/** Plays a challenge card: by the human hider (player), or by a bot hider (player undefined). */
 export function playChallenge(player, cardId) {
   const s = game.state;
   if (s.phase !== "seeking") return;
+  const botHider = game.isBotId(game.hiderId());
+  if (player ? !isActiveHider(player) : !botHider) return; // only the current hider may play their cards
   if (s.challenge) return player?.sendMessage("§cA challenge is already running.");
   const i = hand().findIndex((c) => c.id === cardId && c.type === "challenge");
   if (i < 0) return;
-  const [card] = hand().splice(i, 1);
-  const ch = challengeById(card.challenge);
+  const ch = challengeById(hand()[i].challenge);
   if (!ch) return;
+  if ((s.usedChallenges ?? []).includes(ch.id)) {
+    player?.sendMessage("§cThat challenge was already played this round.");
+    return;
+  }
+  hand().splice(i, 1);
+  s.usedChallenges = [...(s.usedChallenges ?? []), ch.id]; // each challenge once per round
   const baseline = {};
   for (const p of world.getAllPlayers()) if (game.isSeeker(p)) baseline[p.id] = itemCount(p, ch.items);
   s.challenge = { id: ch.id, left: CONFIG.challengeSeconds, baseline, botLeft: 45 + Math.floor(Math.random() * 75) };
   game.broadcast(`§6${game.nameOf(game.hiderId())} played a challenge: §l${ch.name}§r§6! §7${ch.desc}`);
-  game.broadcast("§7No questions until a seeker completes it.");
+  game.broadcast("§7No questions and no teleporting until a seeker completes it.");
   announce("§6Challenge!", ch.name);
   game.save();
 }
@@ -285,13 +289,8 @@ export function tickSecond() {
     p?.sendMessage("§7You took too long, so the best powerups were picked for you.");
     autoFinish();
   }
-  // A person who never discards down to the hand limit gets trimmed after a while.
-  if (!s.offer && hand().length > CONFIG.handSize) {
-    s.overHand = (s.overHand ?? 0) + 1;
-    if (s.overHand > CONFIG.offerSeconds) trimHand();
-  } else {
-    s.overHand = 0;
-  }
+  // Hands saved by older versions could be oversized: repair them.
+  if (hand().length > CONFIG.handSize) handRules.trim(hand(), CONFIG.handSize, cards.cardValue);
 
   const ch = activeChallenge();
   if (ch) {
@@ -309,7 +308,7 @@ export function tickSecond() {
       const bot = s.players.find((p) => p.bot && p.id !== game.hiderId());
       return completeChallenge(bot?.name ?? "The seekers");
     }
-    if (--s.challenge.left <= 0) {
+    if (CONFIG.challengeSeconds > 0 && --s.challenge.left <= 0) {
       s.challenge = null;
       game.broadcast(`§7The challenge "${ch.name}" timed out. Questions are open again.`);
       announce("§7Challenge over", "Questions are open again");

@@ -8,12 +8,16 @@
 //   blockAfter: a block a seeker used something on turns into this block
 //   dimension: a seeker enters this dimension
 
+//   needsMobs: only dealt when hostile mobs are on (it depends on drops that are near-impossible to get in
+//              Peaceful, like gunpowder or string)
+
 export const CHALLENGES = [
   {
     id: "fish",
     name: "Catch a fish",
     desc: "Any seeker gets a raw fish (cod, salmon, tropical fish or pufferfish).",
     items: ["minecraft:cod", "minecraft:salmon", "minecraft:tropical_fish", "minecraft:pufferfish"],
+    needsMobs: true, // a fishing rod needs string, which realistically comes from spiders
   },
   {
     id: "mud",
@@ -51,12 +55,7 @@ export const CHALLENGES = [
     name: "Ignite TNT",
     desc: "Light a block of TNT.",
     spawn: (e) => e.typeId === "minecraft:tnt",
-  },
-  {
-    id: "nether",
-    name: "Enter the Nether",
-    desc: "Any seeker steps into the Nether.",
-    dimension: "minecraft:nether",
+    needsMobs: true, // gunpowder comes from creepers
   },
   {
     id: "bread",
@@ -72,6 +71,11 @@ function isBaby(e) {
   } catch {
     return true;
   }
+}
+
+/** Ids of challenges that can't realistically be done with these settings (never dealt). */
+export function unattainableChallenges(rules) {
+  return CHALLENGES.filter((c) => c.needsMobs && rules?.peaceful).map((c) => c.id);
 }
 
 export function challengeById(id) {

@@ -12,21 +12,47 @@ export const MORPH_TYPES = [
 // 0 = no limit
 export const HEIGHT_LIMITS = [0, 80, 100, 120, 160, 200];
 
+// What fills the ruled-out area in the sky (so it shows dark on real maps): [id, label, block, states, fallback].
+// Top slabs sit in the upper half of the block and let light through; wool slabs show on maps in wool's color.
+export const FILL_MODES = [
+  ["wool_slab", "Black wool top slabs", "minecraft:black_wool_slab", { "minecraft:vertical_half": "top" }, "minecraft:black_wool"],
+  ["off", "Off (outline only)"],
+  ["glass", "Black stained glass", "minecraft:black_stained_glass"],
+  ["slab", "Blackstone slabs", "minecraft:blackstone_slab"],
+];
+
+/** { type, states, fallback } for a fill mode, or undefined when it's off. */
+export function fillBlock(mode) {
+  const m = FILL_MODES.find(([id]) => id === mode);
+  return m?.[2] ? { type: m[2], states: m[3], fallback: m[4] } : undefined;
+}
+
+// How many times the whole group rotates through hiding. After everyone has hidden, everyone is moved to a new
+// random location with a new border and it starts again; scores add up.
+export const ROTATIONS = [1, 2, 3, 4, 5];
+
 const DEFAULTS = {
   morph: false,
   morphType: "both",
   maxY: 0,
   allowWater: false,
-  allowNether: false,
-  allowEnd: false,
+  peaceful: false, // hostile mobs are on by default; the admin can switch to Peaceful
+  rotations: 3,
+  fillMode: "wool_slab",
+  zoomKit: false,
+  alignToMap: false,
 };
+
+// The Nether and the End were removed as hiding options: games are Overworld-only. Settings saved by older
+// versions are migrated by forcing these off.
+const FORCED = { allowNether: false, allowEnd: false };
 
 export function getSettings() {
   try {
     const raw = world.getDynamicProperty(KEY);
-    if (typeof raw === "string") return { ...DEFAULTS, ...JSON.parse(raw) };
+    if (typeof raw === "string") return { ...DEFAULTS, ...JSON.parse(raw), ...FORCED };
   } catch {}
-  return { ...DEFAULTS };
+  return { ...DEFAULTS, ...FORCED };
 }
 
 export function saveSettings(settings) {
@@ -57,11 +83,14 @@ export function morphLabel(type) {
 
 /** One-line-per-setting summary for menus. */
 export function describeSettings(s) {
-  const allowed = ["Overworld", s.allowNether && "Nether", s.allowEnd && "End"].filter(Boolean).join(", ");
+  const rot = s.rotations ?? 1;
   return [
     `Morph: ${s.morph ? morphLabel(s.morphType) : "Off"}`,
     `Height limit: ${s.maxY ? `Y ${s.maxY}` : "None"}`,
     `Hide in water: ${s.allowWater ? "Yes" : "No"}`,
-    `Hiding dimensions: ${allowed}`,
+    `Hostile mobs: ${s.peaceful ? "Off (Peaceful)" : "On"}`,
+    `Rotations: ${rot}${rot > 1 ? " (new random location each time)" : ""}`,
+    `Sky fill on maps: ${FILL_MODES.find(([id]) => id === s.fillMode)?.[1] ?? "Off"}`,
+    `Map station: ${s.zoomKit ? "Yes" : "No"}${s.alignToMap ? " · play area lined up with maps" : ""}`,
   ].join("\n");
 }

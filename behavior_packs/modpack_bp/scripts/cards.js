@@ -3,7 +3,9 @@
 //   time      - +N minutes to the hider's score while it's in their hand
 //   cancel    - block the question that was just asked (played in the few seconds before it's answered)
 //   challenge - force the seekers to complete a challenge before they can ask anything else
-import { challengeById, randomChallenge } from "./challenges.js";
+import { CHALLENGES, challengeById } from "./challenges.js";
+import { CONFIG } from "./config.js";
+import { bonusSeconds as handBonus } from "./hand.js";
 
 const POOL = [
   { type: "time", minutes: 3, weight: 25 },
@@ -25,12 +27,30 @@ function pickWeighted() {
   return POOL[0];
 }
 
-export function drawCards(n) {
+/**
+ * Draws n cards. Each challenge can only come up once per round, so challenges listed in `taken` (and ones
+ * already drawn in this batch) are skipped. When none are left, a different card is drawn instead.
+ */
+export function drawCards(n, taken = []) {
+  const blocked = new Set(taken);
   return Array.from({ length: n }, () => {
-    const base = pickWeighted();
-    const card = { id: `${Date.now().toString(36)}${(seq++).toString(36)}`, type: base.type };
-    if (base.type === "time") card.minutes = base.minutes;
-    if (base.type === "challenge") card.challenge = randomChallenge().id;
+    const card = { id: `${Date.now().toString(36)}${(seq++).toString(36)}` };
+    for (let tries = 0; tries < 20; tries++) {
+      const base = pickWeighted();
+      if (base.type === "challenge") {
+        const open = CHALLENGES.filter((c) => !blocked.has(c.id));
+        if (!open.length) continue;
+        card.type = "challenge";
+        card.challenge = open[Math.floor(Math.random() * open.length)].id;
+        blocked.add(card.challenge);
+        return card;
+      }
+      card.type = base.type;
+      if (base.type === "time") card.minutes = base.minutes;
+      return card;
+    }
+    card.type = "time";
+    card.minutes = 3;
     return card;
   });
 }
@@ -64,7 +84,7 @@ export function cardValue(c) {
   return 60;
 }
 
-/** Extra seconds from the time cards in a hand. */
+/** Extra seconds from the time cards in a hand (never more than the hand limit's worth of cards). */
 export function bonusSeconds(hand) {
-  return (hand ?? []).reduce((n, c) => n + (c.type === "time" ? c.minutes * 60 : 0), 0);
+  return handBonus(hand, CONFIG.handSize);
 }

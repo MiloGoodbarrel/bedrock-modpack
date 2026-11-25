@@ -31,4 +31,4 @@ foreach ($root in $roots) {
         Write-Host "Linked $link"
     }
 }
-Write-Host "Done. Enable 'Hide & Seek BP' and 'Hide & Seek RP' on a world."
+Write-Host "Done. Enable 'Extreme Hide & Seek BP' and 'Extreme Hide & Seek RP' on a world."

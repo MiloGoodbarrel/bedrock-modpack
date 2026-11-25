@@ -9,10 +9,58 @@
 // gets wool is remembered with the "version" (game, round, number of answers) it was drawn for. Chunks drawn
 // for an older version are cleaned up in the background, loading them with a ticking area if needed, so a new
 // hider's round starts with a clean sky. game.js also swaps everyone's map for a fresh one each round.
-import { world, system } from "@minecraft/server";
+import { world, system, BlockPermutation } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 import { insidePlayArea } from "./rules.js";
 import { possibleFn } from "./map.js";
+import { FILL_MODES, fillBlock } from "./settings.js";
+
+// Every block type this module ever places (or used to), so old ones get cleared even if the settings changed.
+const OURS = new Set(
+  [
+    CONFIG.skyLineBlock,
+    CONFIG.skyLineFallback,
+    "minecraft:red_wool",
+    ...FILL_MODES.flatMap(([, , b, , fb]) => [b, fb]),
+  ].filter(Boolean)
+);
+
+const perms = new Map();
+
+/** The block to place, e.g. a top-half wool slab, falling back to a full block if the slab doesn't exist. */
+function permutation(type, states, fallback) {
+  const key = `${type}|${fallback}`;
+  if (!perms.has(key)) {
+    let p;
+    try {
+      p = BlockPermutation.resolve(type, states);
+    } catch {
+      try {
+        p = BlockPermutation.resolve(type);
+      } catch {
+        try {
+          p = fallback ? BlockPermutation.resolve(fallback) : undefined;
+        } catch {}
+      }
+    }
+    perms.set(key, p);
+  }
+  return perms.get(key);
+}
+
+/** Y for the lines: CONFIG.skyLineY, or build height (the highest placeable block, normally 319). */
+function skyY(dim) {
+  if (CONFIG.skyLineY != null) return CONFIG.skyLineY;
+  try {
+    return dim.heightRange.max - 1; // max is exclusive
+  } catch {
+    return 319;
+  }
+}
+
+function linePerm() {
+  return permutation(CONFIG.skyLineBlock, CONFIG.skyLineStates, CONFIG.skyLineFallback);
+}
 
 const OVERWORLD = "minecraft:overworld";
 const RADIUS = 4; // chunks around each player
@@ -50,7 +98,7 @@ function drawing(state) {
 }
 
 function versionOf(state) {
-  return drawing(state) ? `${state.gameId}:${state.turn}:${state.clues.filter((c) => !c.cancelled).length}` : "none";
+  return drawing(state) ? `${state.gameId}:${state.cycle ?? 0}:${state.turn}:${state.clues.filter((c) => !c.cancelled).length}` : "none";
 }
 
 /** Once per second. */
@@ -80,11 +128,11 @@ export function tick(state) {
 
   const dim = world.getDimension(OVERWORLD);
   if (todo.size) {
-    const inside = version === "none" ? undefined : insideFn(state);
+    const shape = version === "none" ? undefined : shapeFns(state);
     let budget = CONFIG.skyLineChunksPerSecond;
     for (const t of [...todo.values()].sort((a, b) => a.d - b.d)) {
       if (budget-- <= 0) break;
-      if (drawChunk(dim, t.cx, t.cz, inside, version)) done.set(t.key, version);
+      if (drawChunk(dim, t.cx, t.cz, shape, version)) done.set(t.key, version);
     }
   }
 
@@ -100,17 +148,24 @@ export function tick(state) {
   saveDirty();
 }
 
-function insideFn(state) {
+/** inside(x,z): the hider could be here. ruledOut(x,z): in the play area but ruled out. fill: block or undefined. */
+function shapeFns(state) {
   const possible = possibleFn(state);
-  return (x, z) => insidePlayArea({ x, z }, state.center) && possible(x, z);
+  const f = fillBlock(state.rules?.fillMode);
+  return {
+    inside: (x, z) => insidePlayArea({ x, z }, state.center) && possible(x, z),
+    ruledOut: (x, z) => insidePlayArea({ x, z }, state.center) && !possible(x, z),
+    fill: f ? permutation(f.type, f.states, f.fallback) : undefined,
+  };
 }
 
 /**
- * Clears old wool in the chunk and (with inside) draws the current edge. Updates the dirty list.
- * Returns false if the chunk isn't loaded.
+ * Clears old blocks in the chunk and (with a shape) draws the current edge, plus the ruled-out fill if that's
+ * on. Updates the dirty list. Returns false if the chunk isn't loaded.
  */
-function drawChunk(dim, cx, cz, inside, version) {
-  const y = CONFIG.skyLineY;
+function drawChunk(dim, cx, cz, shape, version) {
+  const inside = shape?.inside;
+  const y = skyY(dim);
   const x0 = cx * 16;
   const z0 = cz * 16;
   let probe;
@@ -135,11 +190,12 @@ function drawChunk(dim, cx, cz, inside, version) {
       const mz = z + 0.5;
       const edge =
         !!inside && inside(mx, mz) && (!inside(mx + w, mz) || !inside(mx - w, mz) || !inside(mx, mz + w) || !inside(mx, mz - w));
+      const want = edge ? linePerm() : shape?.fill && shape.ruledOut(mx, mz) ? shape.fill : undefined;
       try {
-        if (edge) {
-          if (block.isAir) block.setType(CONFIG.skyLineBlock);
+        if (want) {
+          if (block.typeId !== want.type.id && (block.isAir || OURS.has(block.typeId))) block.setPermutation(want);
           placed = true;
-        } else if (block.typeId === CONFIG.skyLineBlock) {
+        } else if (OURS.has(block.typeId)) {
           block.setType("minecraft:air");
         }
       } catch {}
@@ -162,7 +218,7 @@ async function cleanup(dim, currentVersion) {
       // Clear whatever is already loaded.
       for (const key of keys) {
         const [cx, cz] = key.split(",").map(Number);
-        if (drawChunk(dim, cx, cz, undefined, "none")) done.delete(key);
+        if (drawChunk(dim, cx, cz, undefined, "none")) done.delete(key); // no shape = clear only
       }
       saveDirty();
       keys = stale();
@@ -178,7 +234,7 @@ async function cleanup(dim, currentVersion) {
       for (let t = 0; t < 40; t++) {
         let ok = false;
         try {
-          ok = !!dim.getBlock({ x: cx * 16, y: CONFIG.skyLineY, z: cz * 16 });
+          ok = !!dim.getBlock({ x: cx * 16, y: skyY(dim), z: cz * 16 });
         } catch {}
         if (ok) break;
         await wait(5);

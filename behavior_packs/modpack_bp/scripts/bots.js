@@ -12,9 +12,11 @@
 
 import { world, system, BlockPermutation } from "@minecraft/server";
 import { CONFIG } from "./config.js";
-import { CATEGORIES, findQuestion } from "./questions.js";
+import { surfaceBlock } from "./surface.js";
+import { CATEGORIES } from "./questions.js";
 import { insidePlayArea } from "./rules.js";
 import * as disguise from "./disguise.js";
+import { constraintsFrom, allOk, smallestYesCircle } from "./geometry.js";
 import * as game from "./game.js";
 
 export const BOT_TYPE = "hs:bot";
@@ -94,7 +96,7 @@ function groundY(d, x, z, nearY) {
   if (nearY != null) return scanDown(d, bx, bz, Math.floor(nearY) + 1, 13, false);
   let top;
   try {
-    top = d.getTopmostBlock({ x: bx, z: bz });
+    top = surfaceBlock(d, { x: bx, z: bz });
   } catch {
     return undefined;
   }
@@ -239,7 +241,7 @@ export function ensureHidePlan() {
   const s = game.state;
   if (planning || s.botHide) return;
   planning = true;
-  const token = `${s.gameId}:${s.turn}`;
+  const token = game.roundKey();
   planHide(token)
     .catch((e) => console.warn(`[hs] bot hide failed: ${e}`))
     .finally(() => {
@@ -249,7 +251,7 @@ export function ensureHidePlan() {
 
 function sameRound(token) {
   const s = game.state;
-  return s.phase === "hiding" && `${s.gameId}:${s.turn}` === token;
+  return s.phase === "hiding" && game.roundKey() === token;
 }
 
 async function waitLoaded(d, x, z, token) {
@@ -313,8 +315,9 @@ function disguiseBot(d, hide) {
     [options[i], options[j]] = [options[j], options[i]];
   }
   for (const block of options) {
-    if (disguise.placeBlock(d, hide, block)) {
-      s.disguise = { kind, type: block, applied: true, entityId: null };
+    const original = disguise.placeBlock(d, hide, block);
+    if (original) {
+      s.disguise = { kind, type: block, applied: true, entityId: null, original }; // original is restored later
       return true;
     }
   }
@@ -331,7 +334,7 @@ function findSpot(d, px, pz) {
     if (!inArea({ x: x + 0.5, z: z + 0.5 })) continue;
     let ground;
     try {
-      ground = d.getTopmostBlock({ x, z });
+      ground = surfaceBlock(d, { x, z });
     } catch {
       continue;
     }
@@ -440,18 +443,13 @@ export function hiderEntity() {
 
 let pool = { round: "", stamp: "", pts: [] };
 
+/** The canonical search-area constraints (geometry.js), shared with the map, sky outline and teleports. */
 function clueChecks() {
-  return game.state.clues
-    .filter((c) => c.qid && c.from && !c.cancelled)
-    .map((c) => ({ c, q: findQuestion(c.qid)?.question }))
-    .filter((x) => x.q?.planar);
+  return constraintsFrom(game.state.clues);
 }
 
 function consistent(p, checks) {
-  const hider = { location: { x: p.x, y: 0, z: p.z } };
-  for (const { c, q } of checks) {
-    if (q.answer({ location: c.from }, hider) !== c.answer) return false;
-  }
+  if (!allOk(checks, p.x, p.z)) return false;
   for (const m of game.state.searched ?? []) {
     if (hyp(p.x - m.x, p.z - m.z) < m.r) return false;
   }
@@ -460,15 +458,12 @@ function consistent(p, checks) {
 
 /** Random point generator, sampling inside the smallest "yes, within N blocks" circle when there is one. */
 function sampler(checks) {
-  let circle;
-  for (const { c, q } of checks) {
-    if (q.radius && c.answer === "Yes" && (!circle || q.radius < circle.r)) circle = { x: c.from.x, z: c.from.z, r: q.radius };
-  }
+  const circle = smallestYesCircle(checks);
   if (!circle) return () => randomPoint(0);
   return () => {
     const a = Math.random() * Math.PI * 2;
     const r = circle.r * Math.sqrt(Math.random());
-    return { x: circle.x + Math.cos(a) * r, z: circle.z + Math.sin(a) * r };
+    return { x: circle.cx + Math.cos(a) * r, z: circle.cz + Math.sin(a) * r };
   };
 }
 
@@ -476,7 +471,7 @@ function sampler(checks) {
 function candidates() {
   const s = game.state;
   s.searched ??= [];
-  const round = `${s.gameId}:${s.turn}`;
+  const round = game.roundKey();
   const stamp = `${s.clues.length}:${s.searchSeq ?? 0}`;
   if (pool.round !== round) pool = { round, stamp: "", pts: [] };
   const checks = clueChecks();
@@ -616,7 +611,8 @@ function syncPresence(id, b) {
   }
   b.entityId = null;
   if (dist > CONFIG.botActiveRange) return undefined;
-  const y = groundY(dim(), b.x, b.z, b.y);
+  // Ground near the last known height, or else the surface (e.g. the start point was moved somewhere new).
+  const y = groundY(dim(), b.x, b.z, b.y) ?? (b.y != null ? groundY(dim(), b.x, b.z, null) : undefined);
   if (y === undefined) return undefined;
   b.y = y;
   try {

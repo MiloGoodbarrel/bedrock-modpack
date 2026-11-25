@@ -1,6 +1,6 @@
-// All menus. Opened with the Hide & Seek Menu item. Bedrock forms are lists of buttons, so the Java mod's tabbed
+// All menus. Opened with the Extreme Hide & Seek Menu item. Bedrock forms are lists of buttons, so the Java mod's tabbed
 // screen becomes a hub with icon buttons (Questions / Clues / Map / Hand), and the question board shows every
-// category and question, with used ones greyed out but still askable (double powerups for the hider).
+// category and question, with ones already asked this round greyed out.
 import { system } from "@minecraft/server";
 import { ActionFormData, MessageFormData, ModalFormData, FormCancelationReason } from "@minecraft/server-ui";
 import * as game from "./game.js";
@@ -8,9 +8,9 @@ import * as powerups from "./powerups.js";
 import { CATEGORIES, findQuestion } from "./questions.js";
 import { checkSpotRules, formatRules } from "./rules.js";
 import { CONFIG } from "./config.js";
-import { getSettings, saveSettings, isAdmin, describeSettings, MORPH_TYPES, HEIGHT_LIMITS } from "./settings.js";
+import { getSettings, saveSettings, isAdmin, describeSettings, MORPH_TYPES, HEIGHT_LIMITS, FILL_MODES, ROTATIONS } from "./settings.js";
 import { MOBS, BLOCKS, heldBlock, prettyId } from "./disguise.js";
-import { hudMapOn, setHudMap, legend, cellBlocks } from "./map.js";
+import { legend, cellBlocks } from "./map.js";
 import { cardName, cardDesc, cardIcon, cardColor, bonusSeconds } from "./cards.js";
 import { challengeById } from "./challenges.js";
 
@@ -71,7 +71,7 @@ export async function openMenu(player) {
       if (game.isHider(player)) return hiderSeekingMenu(player);
       return game.isSeeker(player) ? seekerMenu(player) : spectatorMenu(player);
     case "between":
-      return menu(player, "Hide & Seek", "Next round is about to start...", [["Close", () => {}]]);
+      return menu(player, "Extreme Hide & Seek", "Next round is about to start...", [["Close", () => {}]]);
     case "ended":
       return resultsMenu(player);
   }
@@ -80,17 +80,7 @@ export async function openMenu(player) {
 // --- Shared tabs ---------------------------------------------------------------
 
 function mapButtons(player) {
-  return [
-    ["§2§lMap§r", () => mapMenu(player), ICON.map],
-    [`HUD minimap: ${hudMapOn(player) ? "§aOn" : "§cOff"}`, () => toggleHudMap(player), ICON.hud],
-  ];
-}
-
-function toggleHudMap(player) {
-  const on = !hudMapOn(player);
-  setHudMap(player, on);
-  player.sendMessage(on ? "§aHUD minimap on." : "§7HUD minimap off.");
-  if (!on) player.onScreenDisplay.setActionBar(" ");
+  return [["§2§lMap§r", () => mapMenu(player), ICON.map]];
 }
 
 function mapMenu(player) {
@@ -125,7 +115,10 @@ function statusLines() {
   const s = game.state;
   const lines = [];
   const ch = game.activeChallenge();
-  if (ch) lines.push(`§6§lCHALLENGE:§r§6 ${ch.name}§r\n§7${ch.desc} (${game.fmt(s.challenge.left)} left)§r`);
+  if (ch) {
+    const left = CONFIG.challengeSeconds > 0 ? `${game.fmt(s.challenge.left)} left` : "no questions until a seeker does it";
+    lines.push(`§6§lCHALLENGE:§r§6 ${ch.name}§r\n§7${ch.desc} (${left})§r`);
+  }
   if (s.pending) lines.push("§7Waiting for the hider's answer...§r");
   const hint = game.disguiseHint();
   if (hint) lines.push(`§d${hint}§r`);
@@ -151,7 +144,7 @@ function lobbyMenu(player) {
   }
   if (isAdmin(player)) buttons.push(["§dGame settings\n§8(admin)", () => settingsMenu(player), ICON.options]);
   buttons.push(["How to play", () => howToPlay(player), ICON.questions]);
-  return menu(player, "Hide & Seek", body, buttons);
+  return menu(player, "Extreme Hide & Seek", body, buttons);
 }
 
 async function settingsMenu(player) {
@@ -168,19 +161,31 @@ async function settingsMenu(player) {
       defaultValueIndex: heightIndex,
     })
     .toggle("Allow hiding in water", { defaultValue: s.allowWater })
-    .toggle("Allow hiding in the Nether", { defaultValue: s.allowNether })
-    .toggle("Allow hiding in the End", { defaultValue: s.allowEnd })
+    .toggle("Peaceful (no hostile mobs; challenges that need mob drops are left out)", { defaultValue: !!s.peaceful })
+    .dropdown("Rotations (after everyone has hidden, move to a new random location)", ROTATIONS.map((n) => `${n}`), {
+      defaultValueIndex: Math.max(0, ROTATIONS.indexOf(s.rotations ?? 1)),
+    })
+    .dropdown("Fill ruled-out areas in the sky (shows dark on maps)", FILL_MODES.map(([, label]) => label), {
+      defaultValueIndex: Math.max(0, FILL_MODES.findIndex(([id]) => id === s.fillMode)),
+    })
+    .toggle("Map station (chest + cartography table at the start, refilled with blank maps and paper each round)", {
+      defaultValue: s.zoomKit,
+    })
+    .toggle("Line up the play area with zoomed-out maps (moves the start point)", { defaultValue: s.alignToMap })
     .submitButton("Save");
   const res = await show(form, player);
   if (!res || res.canceled || !res.formValues) return;
-  const [morph, morphType, height, allowWater, allowNether, allowEnd] = res.formValues;
+  const [morph, morphType, height, allowWater, peaceful, rotations, fill, zoomKit, alignToMap] = res.formValues;
   const next = {
     morph: !!morph,
     morphType: MORPH_TYPES[morphType]?.[0] ?? "both",
     maxY: HEIGHT_LIMITS[height] ?? 0,
     allowWater: !!allowWater,
-    allowNether: !!allowNether,
-    allowEnd: !!allowEnd,
+    peaceful: !!peaceful,
+    rotations: ROTATIONS[rotations] ?? 1,
+    fillMode: FILL_MODES[fill]?.[0] ?? "off",
+    zoomKit: !!zoomKit,
+    alignToMap: !!alignToMap,
   };
   saveSettings(next);
   player.sendMessage("§dSettings saved. They apply from the next game started:");
@@ -193,9 +198,10 @@ function howToPlay(player) {
     "§l1. Hide§r",
     `The hider gets ${game.fmt(CONFIG.hidingSeconds)} in Creative to build or find a spot. ` +
       `Going over costs ${CONFIG.overtimePenaltyPerSecond}s of score per second.`,
-    "Your spot must be On Ground, Dry, Above Sea Level, Near Sky Light and Inside the Play Area " +
-      `(${CONFIG.playAreaRadius * 2}x${CONFIG.playAreaRadius * 2}). The admin can change some of these.`,
-    "Lock in from the menu. You switch to Survival and are frozen in place (you can still look and use blocks).",
+    "Your spot must be On Ground, Dry (no water or lava), Above Sea Level, Near Sky Light, in the Overworld " +
+      `and Inside the Play Area (${CONFIG.playAreaRadius * 2}x${CONFIG.playAreaRadius * 2}). The admin can change some of these.`,
+    "Lock in from the menu. You stay in Creative with every item, but you're frozen in place (you can still " +
+      "look around and use or place blocks within reach).",
     "",
     "§l2. Seek§r",
     `Seekers ask questions from the question board (one every ${CONFIG.questionCooldownSeconds}s), taking turns ` +
@@ -204,12 +210,24 @@ function howToPlay(player) {
     "§9Comparing§r and §aDistance§r narrow down the area (the map blacks it out). §eObservation§r asks about " +
       "the hider's surroundings. §cTask§r makes the hider do something that gives them away: a firework, a fire, " +
       "a bee, a block next to them.",
-    "Asked questions are greyed out but can be asked again, which gives the hider double powerups.",
+    "Each question and task can be asked once per round (asked ones are greyed out), and each challenge " +
+      "can only be played once per round.",
     "Look straight at the hider with nothing in the way, or hit them, to find them.",
     `Seekers can teleport from the menu once every ${game.fmt(CONFIG.teleportCooldownSeconds)}, ` +
       "to a teammate or to coordinates, but not into ruled-out areas or during a challenge.",
     "The hider sees every seeker's direction and distance above their hotbar.",
-    "Every new hider's round starts with a fresh map for everyone: old lines and markers are gone.",
+    "",
+    "§lThe map§r",
+    "Every new hider's round starts with a fresh map for everyone: old lines and markers are gone. Red lines in " +
+      "the sky show where the hider can still be, and ruled-out areas turn black. Both show up on your map.",
+    "§lMaking the big map (whole play area):§r",
+    "1. Get a blank map (it's handed to you, or take one from the map station chest at the start point) and " +
+      "3 paper (from the station chest, or craft them from sugar cane).",
+    "2. Use the blank map (hold it and press use) to start it.",
+    "3. At a cartography table (one appears at the start point with the map station on), put the map in the " +
+      "top slot and 1 paper in the bottom slot, then take the zoomed-out map.",
+    "4. Do step 3 two more times. After 3 zooms the map covers about 1024x1024 blocks: the whole play area.",
+    "5. Hold it in your off hand so it stays on screen.",
     "",
     "§l3. Powerups§r",
     "Every question earns the hider cards (Comparing: draw 3 pick 2 · Distance: draw 2 pick 2 · " +
@@ -219,6 +237,8 @@ function howToPlay(player) {
     "",
     "§l4. Score§r",
     "Your hide time counts until you're found, plus time-bonus cards. Highest total wins.",
+    "If the admin set more than one rotation, then after everyone has hidden, everybody is teleported to a new " +
+      "random location with a new border and it goes around again. Scores add up across rotations.",
     "",
     "§lMorph mode§r",
     "If the admin turns it on, the hider picks a mob or block disguise before locking in. " +
@@ -291,7 +311,7 @@ function waitingMenu(player) {
     s.hidingLeft > 0
       ? `${game.nameOf(game.hiderId())} is building their spot. ${game.fmt(s.hidingLeft)} left.`
       : `${game.nameOf(game.hiderId())} is in overtime (+${s.overtime}s).`;
-  return menu(player, "Hide & Seek", body, [
+  return menu(player, "Extreme Hide & Seek", body, [
     ["Question board §8(preview)", () => boardMenu(player, true), ICON.questions],
     ...mapButtons(player),
     ["Game options", () => optionsMenu(player), ICON.options],
@@ -333,7 +353,7 @@ function teleportMenu(player) {
   const buttons = game.teammates(player).map((t) => [`To ${t.name}`, () => game.teleportToTeammate(player, t.id), ICON.teleport]);
   buttons.push(["To coordinates...", () => teleportCoordsMenu(player), ICON.map]);
   const c = game.state.center;
-  if (c) buttons.push(["To the start point", () => game.teleportTo(player, Math.floor(c.x), Math.floor(c.z)), ICON.hud]);
+  if (c) buttons.push(["To the start point", () => game.teleportToStart(player), ICON.hud]);
   buttons.push(back(player));
   return menu(player, "Teleport", body, buttons);
 }
@@ -360,7 +380,7 @@ function boardMenu(player, preview = false) {
   const body =
     (blocked ? `§c${blocked}§r\n` : "§aPick a category.§r\n") +
     "Answers are about where YOU are standing.\n" +
-    "Every question earns the hider powerups. §7Asking a used question again earns them double.§r";
+    "Every question earns the hider powerups. §7Each question and task can be asked once per round.§r";
   const buttons = CATEGORIES.map((cat) => {
     const left = cat.questions.filter((q) => !s.used.includes(q.id)).length;
     return [
@@ -378,16 +398,13 @@ function categoryMenu(player, category, preview = false) {
   const blocked = preview ? "Questions open once the hider locks in." : game.canAsk(player);
   const buttons = category.questions.map((q) => {
     const used = s.used.includes(q.id);
-    const label = used ? `§8${q.text}\n§8✔ asked · again = double powerups` : `${q.text}`;
+    const label = used ? `§8${q.text}\n§8✔ already asked this round` : `${q.text}`;
     return [
       label,
       async () => {
-        if (preview) return categoryMenu(player, category, true);
+        if (preview || used) return categoryMenu(player, category, preview);
         const now = game.canAsk(player);
         if (now) return player.sendMessage(`§c${now}`);
-        if (used && !(await confirm(player, "Ask again?", `"${q.text}" was already asked.\nThe hider gets double powerups if you ask it again.`))) {
-          return categoryMenu(player, category);
-        }
         game.ask(player, q.id);
       },
       category.icon,
@@ -399,7 +416,7 @@ function categoryMenu(player, category, preview = false) {
 }
 
 function spectatorMenu(player) {
-  return menu(player, "Hide & Seek", `${game.nameOf(game.hiderId())} is hiding. You're not in this game.`, [
+  return menu(player, "Extreme Hide & Seek", `${game.nameOf(game.hiderId())} is hiding. You're not in this game.`, [
     [`Clues (${game.state.clues.length})`, () => cluesMenu(player), ICON.clues],
     ["Close", () => {}],
   ]);
@@ -414,7 +431,7 @@ function hiderSeekingMenu(player) {
     `§7Hidden for:§r §a${game.fmt(game.currentScore())}§r${bonus ? ` §7(includes +${game.fmt(bonus)} from cards)§r` : ""}`,
     `§7Your cards:§r ${s.hand.length}/${CONFIG.handSize}    §7Questions asked:§r ${s.clues.length}`,
     ...statusLines(),
-    "Stay put! You can look around and use blocks, but not walk.",
+    "Stay put! You're in Creative with every item, and can look around and use or place blocks, but not walk.",
   ].join("\n");
   const buttons = [];
   if (s.offer) buttons.push([`§d§lPick powerups§r §8(${s.offer.picks} to pick)`, () => cardPicker(player), ICON.hand]);
@@ -456,53 +473,70 @@ function cardMenu(player, card) {
   return menu(player, cardName(card), cardDesc(card), [["Back", () => handMenu(player), ICON.back]]);
 }
 
-/** "Pick N powerups" screen. Closing it doesn't skip it: it comes back, then auto-picks after a while. */
+let pickerOpen = false;
+
+/**
+ * "Pick N powerups" screen. Closing it doesn't skip it: it comes back, then auto-picks after a while.
+ * With a full hand, picking a card asks which card to discard (or to decline the new one) in the same step,
+ * so the hand never goes over the limit. Every action carries the offer's id, so a stale screen does nothing.
+ */
 async function cardPicker(player) {
-  for (let attempt = 0; attempt < 6; attempt++) {
-    const o = game.state.offer;
-    if (!o || game.hiderId() !== player.id) break;
-    const form = new ActionFormData()
-      .title(`Pick ${o.picks} Powerup${o.picks > 1 ? "s" : ""}`)
-      .body(`Choose powerups to add to your hand (${game.state.hand.length}/${CONFIG.handSize}).`);
-    for (const c of o.cards) form.button(`${cardColor(c)}§l${cardName(c)}§r\n§8${shortDesc(c)}`, cardIcon(c));
-    const res = await show(form, player);
-    if (!res || res.canceled || res.selection === undefined) {
-      await wait(40);
-      continue;
+  if (pickerOpen) return; // one picker at a time; merged offers show up in the open one
+  pickerOpen = true;
+  try {
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const s = game.state;
+      const o = s.offer;
+      if (!o || s.phase !== "seeking" || game.hiderId() !== player.id) return;
+      const full = s.hand.length >= CONFIG.handSize;
+      const cardsNow = [...o.cards];
+      const form = new ActionFormData()
+        .title(`Pick ${o.picks} Powerup${o.picks > 1 ? "s" : ""}`)
+        .body(
+          `Choose powerups to add to your hand (${s.hand.length}/${CONFIG.handSize}).` +
+            (full ? "\n§eYour hand is full: taking a card means discarding one.§r" : "")
+        );
+      for (const c of cardsNow) form.button(`${cardColor(c)}§l${cardName(c)}§r\n§8${shortDesc(c)}`, cardIcon(c));
+      const res = await show(form, player);
+      if (!res || res.canceled || res.selection === undefined) {
+        await wait(40);
+        continue;
+      }
+      const card = cardsNow[res.selection];
+      let discardId;
+      if (game.state.hand.length >= CONFIG.handSize) {
+        discardId = await discardChoice(player, card);
+        if (discardId === undefined) continue; // closed: back to the picker
+      }
+      powerups.takeCard(player, o.id, card.id, discardId);
+      attempt = -1; // reset after a successful pick
     }
-    powerups.takeCard(player, o.cards[res.selection].id);
-    attempt = -1; // reset after a successful pick
+    if (game.state.offer && game.hiderId() === player.id) {
+      player.sendMessage("§7Powerups picked for you.");
+      powerups.autoFinish();
+    }
+  } finally {
+    pickerOpen = false;
   }
-  if (game.state.offer && game.hiderId() === player.id) {
-    player.sendMessage("§7Powerups picked for you.");
-    powerups.autoFinish();
-  }
-  await discardPicker(player);
+}
+
+/** Hand is full: which card goes? Returns a hand card's id, the offered card's id (decline), or undefined. */
+async function discardChoice(player, card) {
+  const h = [...game.state.hand];
+  const form = new ActionFormData()
+    .title("Hand full: discard one")
+    .body(`You can hold ${CONFIG.handSize} cards. Taking §l${cardName(card)}§r means throwing one away.`);
+  for (const c of h) form.button(`${cardColor(c)}§l${cardName(c)}§r\n§8throw this away`, cardIcon(c));
+  form.button(`§7Don't take ${cardName(card)}`, cardIcon(card));
+  const res = await show(form, player);
+  if (!res || res.canceled || res.selection === undefined) return undefined;
+  return res.selection < h.length ? h[res.selection].id : card.id;
 }
 
 function shortDesc(c) {
   if (c.type === "time") return `+${c.minutes} min to your hide time`;
   if (c.type === "cancel") return "block a question";
   return challengeById(c.challenge)?.desc ?? "";
-}
-
-/** Forced discard down to the hand limit. */
-async function discardPicker(player) {
-  for (let attempt = 0; attempt < 6; attempt++) {
-    const h = game.state.hand;
-    if (h.length <= CONFIG.handSize || game.hiderId() !== player.id) return;
-    const form = new ActionFormData()
-      .title("Hand full: discard")
-      .body(`You can hold ${CONFIG.handSize} cards. Pick ${h.length - CONFIG.handSize} to throw away.`);
-    for (const c of h) form.button(`${cardColor(c)}§l${cardName(c)}`, cardIcon(c));
-    const res = await show(form, player);
-    if (!res || res.canceled || res.selection === undefined) {
-      await wait(40);
-      continue;
-    }
-    powerups.discardCard(player, h[res.selection].id);
-    attempt = -1;
-  }
 }
 
 /** Prompt the moment a question is asked, if the hider holds a Cancel card. */

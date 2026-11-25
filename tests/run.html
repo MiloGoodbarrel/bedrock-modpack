@@ -1,0 +1,27 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Pure-JS tests</title>
+<pre id="out">running...</pre>
+<script type="module">
+  // Runs the pure-JS test suites in a browser, for machines without Node.js:
+  //   python -m http.server 8765 --bind 127.0.0.1   (from the repo root)
+  //   then open http://127.0.0.1:8765/tests/run.html
+  const out = document.getElementById("out");
+  const results = [];
+  try {
+    const g = await import("../behavior_packs/modpack_bp/scripts/geometry.js");
+    const { runGeometryTests } = await import("./geometry.test.js");
+    results.push(["geometry", runGeometryTests(g)]);
+  } catch (e) {
+    results.push(["geometry", { passed: false, fails: [String(e)] }]);
+  }
+  try {
+    const h = await import("../behavior_packs/modpack_bp/scripts/hand.js");
+    const { runHandTests } = await import("./hand.test.js");
+    results.push(["hand", runHandTests(h)]);
+  } catch (e) {
+    results.push(["hand", { passed: false, fails: [String(e)] }]);
+  }
+  window.testResults = results;
+  out.textContent = results.map(([n, r]) => `${n}: ${r.passed ? "PASS" : "FAIL " + r.fails.join("; ")}`).join("\n");
+</script>

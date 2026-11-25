@@ -7,7 +7,8 @@
 //   question goes through: the game makes the hider do something that gives them away.
 //
 // `planar` questions depend only on x/z, so bots and the map can use them to rule out areas.
-import { BlockPermutation } from "@minecraft/server";
+import { BlockPermutation, ItemStack } from "@minecraft/server";
+import { surfaceBlock } from "./surface.js";
 
 // Overworld-equivalent position: Nether coordinates count 8x so north/south and distances still make sense
 // when someone is in the Nether. Plain objects without a dimension are taken as-is.
@@ -49,25 +50,30 @@ function standingOn(e) {
   return getBlock(e.dimension, { x: Math.floor(l.x), y: Math.floor(l.y - 0.01), z: Math.floor(l.z) });
 }
 
-/** True if any block within r (a cube around the feet) matches test(typeId). */
+/**
+ * True if any block within r (a cube around the feet) matches test(typeId); false if none does; undefined if
+ * nothing matched but part of the area couldn't be read (unloaded), so "No" can't be claimed for sure.
+ */
 function anyNear(e, r, test) {
-  if (!e.dimension) return false;
+  if (!e.dimension) return undefined;
   const l = e.location;
   const bx = Math.floor(l.x);
   const by = Math.floor(l.y);
   const bz = Math.floor(l.z);
+  let missing = false;
   for (let dx = -r; dx <= r; dx++) {
     for (let dy = -r; dy <= r; dy++) {
       for (let dz = -r; dz <= r; dz++) {
         const b = getBlock(e.dimension, { x: bx + dx, y: by + dy, z: bz + dz });
-        if (b && test(b.typeId)) return true;
+        if (!b) missing = true;
+        else if (test(b.typeId)) return true;
       }
     }
   }
-  return false;
+  return missing ? undefined : false;
 }
 
-const yesNo = (v) => (v ? "Yes" : "No");
+const yesNo = (v) => (v === undefined ? "Unknown (part of that area isn't loaded)" : v ? "Yes" : "No");
 const FLOWERS = /(flower|tulip|dandelion|poppy|orchid|allium|bluet|daisy|lilac|rose_bush|peony|lily_of_the_valley|pitcher_plant|wildflowers|petals)/;
 
 // --- Task helpers ------------------------------------------------------------
@@ -100,7 +106,7 @@ function spotNear(hider) {
     if (here?.isAir && below && !below.isAir && !below.isLiquid) return at;
   }
   try {
-    const top = d.getTopmostBlock({ x: fx, z: fz });
+    const top = surfaceBlock(d, { x: fx, z: fz });
     if (top) return { x: fx, y: top.location.y + 1, z: fz };
   } catch {}
   return { x: fx, y: fy + 2, z: fz };
@@ -172,11 +178,6 @@ export const CATEGORIES = [
           if (!a || !h) return "Unknown (biome check not supported on this game version)";
           return a === h ? `Yes (${prettyBiome(a)})` : `No (not ${prettyBiome(a)})`;
         },
-      },
-      {
-        id: "same_dimension",
-        text: "Are you in the same dimension as me?",
-        answer: (asker, hider) => yesNo(asker.dimension?.id === hider.dimension?.id),
       },
     ],
   },
@@ -270,7 +271,7 @@ export const CATEGORIES = [
         answer: (asker, hider) => {
           try {
             const l = hider.location;
-            const top = hider.dimension.getTopmostBlock({ x: Math.floor(l.x), z: Math.floor(l.z) });
+            const top = surfaceBlock(hider.dimension, { x: Math.floor(l.x), z: Math.floor(l.z) });
             return yesNo(!top || top.location.y < Math.floor(l.y) + 1);
           } catch {
             return "Unknown";
@@ -321,6 +322,23 @@ export const CATEGORIES = [
         id: "task_sand",
         text: "Place a sand block!",
         perform: (hider) => (place(hider, "minecraft:sand") ? "A sand block was placed next to the hider." : "The sand couldn't be placed."),
+      },
+      {
+        id: "task_drop_floor",
+        text: "Drop the block you're standing on!",
+        perform: (hider) => {
+          let type = standingOn(hider)?.typeId;
+          if (!type || type === "minecraft:air" || /water|lava/.test(type)) type = "minecraft:dirt";
+          const at = spotNear(hider);
+          const drop = { x: at.x + 0.5, y: at.y + 0.5, z: at.z + 0.5 };
+          for (const t of [type, "minecraft:dirt"]) {
+            try {
+              hider.dimension.spawnItem(new ItemStack(t, 1), drop);
+              return `The hider dropped a ${prettyBlock(t)} block next to their spot.`;
+            } catch {}
+          }
+          return "The hider had nothing to drop.";
+        },
       },
       {
         id: "task_my_block",
