@@ -275,7 +275,13 @@ Backup commands (these need cheats on): `/scriptevent hs:menu` opens the menu, `
 powershell -ExecutionPolicy Bypass -File tools\build.ps1
 ```
 
-This creates `dist/ExtremeHideAndSeek.mcaddon`.
+This creates `dist/ExtremeHideAndSeek.mcaddon`. Add `-Test` to build a test pack named after the current
+branch (`dist/ExtremeHideAndSeek-test-<branch>.mcaddon`).
+
+### Change procedure
+
+Every change is made on its own branch and comes with a test pack. It's merged into `main` only after the
+owner has tried it and approved it. The full steps are in [CLAUDE.md](CLAUDE.md).
 
 ## Roadmap
 
