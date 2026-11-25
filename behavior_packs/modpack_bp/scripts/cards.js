@@ -7,21 +7,23 @@ import { CHALLENGES, challengeById } from "./challenges.js";
 import { CONFIG } from "./config.js";
 import { bonusSeconds as handBonus } from "./hand.js";
 
+// Card kinds; their draw weights come from CONFIG.cardWeights.
 const POOL = [
-  { type: "time", minutes: 3, weight: 25 },
-  { type: "time", minutes: 5, weight: 14 },
-  { type: "time", minutes: 10, weight: 6 },
-  { type: "cancel", weight: 12 },
-  { type: "challenge", weight: 20 },
+  { key: "time3", type: "time", minutes: 3 },
+  { key: "time5", type: "time", minutes: 5 },
+  { key: "time10", type: "time", minutes: 10 },
+  { key: "cancel", type: "cancel" },
+  { key: "challenge", type: "challenge" },
 ];
 
 let seq = 0;
 
 function pickWeighted() {
-  const total = POOL.reduce((n, c) => n + c.weight, 0);
+  const weight = (c) => Math.max(0, CONFIG.cardWeights?.[c.key] ?? 0);
+  const total = POOL.reduce((n, c) => n + weight(c), 0);
   let roll = Math.random() * total;
   for (const c of POOL) {
-    roll -= c.weight;
+    roll -= weight(c);
     if (roll < 0) return c;
   }
   return POOL[0];

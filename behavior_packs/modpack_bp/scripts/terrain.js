@@ -64,6 +64,16 @@ export function progress(state) {
   return d.cells.filter(Boolean).length / d.cells.length;
 }
 
+/**
+ * Whether the play area has any water or ice, from the terrain scan: true / false once the scan is finished,
+ * undefined while it isn't (so nothing gets ruled out on incomplete data).
+ */
+export function hasWater(state) {
+  const d = current(state);
+  if (!d || d.cells.some((c) => !c)) return undefined;
+  return d.cells.some((c) => c === "§9" || c === "§b");
+}
+
 /** Terrain color code at overworld x/z, or undefined if not scanned yet. */
 export function colorAt(state, x, z) {
   const d = current(state);

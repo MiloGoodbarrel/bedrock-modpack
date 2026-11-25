@@ -11,7 +11,7 @@ ConnorIGL on YouTube. This is an independent rebuild for Bedrock. No code or ass
 Works on Windows, Xbox, PlayStation, Switch, mobile and Realms. **No experimental toggles needed.**
 Requires Minecraft Bedrock **1.21.90 or newer**.
 
-> **Status:** early development (v0.24.0). Every feature below is written, but none of it has been playtested
+> **Status:** early development (v0.25.0). Every feature below is written, but none of it has been playtested
 > in game yet, so expect bugs. Please report anything that shows up in the Content Log (Settings → Creator).
 
 ## How to play
@@ -46,6 +46,7 @@ game starts.
 | Allow hiding in water | Removes the water part of the Dry rule (lava is never allowed) |
 | Peaceful | Off by default (hostile mobs on). On: no hostile mobs or hunger, and challenges that need mob drops (TNT, fishing) are never dealt |
 | Rotations | 1–5 (default 3). After everyone has hidden, everyone is moved to a new random location with a new border and it goes around again |
+| How seekers find a hider | Look at them or hit them (default) · keep them in view for a second, or hit them · hit them only. Disguised hiders always have to be hit |
 | Fill ruled-out areas in the sky | Black wool top slabs (default) · off · black stained glass · blackstone slabs (see Real maps below) |
 | Map station | Chest + cartography table at the start, refilled with blank maps and paper each round |
 | Line up the play area with zoomed-out maps | Moves the start point so one zoomed-out map covers the play area |
@@ -150,13 +151,29 @@ discard any extras.
 - **Time Bonus (3 / 5 / 10 min):** added to the hider's time while the card is in their hand.
 - **Cancel:** when a question is asked, a hider holding Cancel gets 10 seconds to block it. The seekers get
   no answer, and the hider earns nothing for that question.
-- **Challenge:** stops all questions until a seeker completes it. Options: catch a fish, make mud, breed
-  chickens, hatch a chicken, bonemeal a plant, build an iron golem, ignite TNT, or get bread. Challenges are
-  only dealt if they're attainable: in Peaceful, TNT (gunpowder comes from creepers) and fishing (a rod needs
-  string, which realistically comes from spiders) are left out. Completion is detected automatically. **No questions can be asked (and nobody can teleport) until a
-  seeker completes the challenge.** There's no time limit by default; `challengeSeconds` in config.js adds one.
-  With only bot seekers, a bot "completes" it after a minute or two. Each challenge comes up at most once per
-  round: once it's been played or is in the hider's hand, it isn't dealt again.
+- **Challenge:** stops all questions until a seeker completes it. **No questions can be asked (and nobody
+  can teleport) until a seeker completes the challenge.** There's no time limit by default;
+  `challengeSeconds` in config.js adds one. With only bot seekers, a bot "completes" it after a minute or two.
+  Each challenge comes up at most once per round: once it's been played or is in the hider's hand, it isn't
+  dealt again.
+
+| Challenge | Counts when |
+|---|---|
+| Catch a fish | A seeker's raw fish count goes up *(can't tell fishing apart from a chest or a teammate)* |
+| Make mud | A block a seeker pours a water bottle on actually turns into mud |
+| Breed chickens | A chick is born near a seeker who fed a chicken in the last 90 seconds |
+| Hatch a chicken | A baby chicken appears near a seeker who threw an egg in the last 10 seconds |
+| Bonemeal a plant | A seeker uses bone meal and the plant really grows (or grass sprouts) |
+| Build an iron golem | A golem appears where a seeker just placed a carved pumpkin |
+| Ignite TNT | TNT a seeker lit with flint and steel or a fire charge goes off |
+| Light a Nether portal | A portal appears where a seeker used flint and steel or a fire charge (don't go through: Overworld only) |
+| Fall 100 blocks and survive | A seeker drops 100+ blocks in one fall and is still alive a second later (teleports don't count) |
+| Break an iron tool | An iron tool that was about to break disappears from the seeker's hand *(dropping it at that moment would also count)* |
+| Bake bread | A seeker's bread count goes up *(can't be attributed, like fish)* |
+
+Challenges are only dealt if they're attainable. In Peaceful, TNT (gunpowder comes from creepers) and fishing
+(a rod needs string, which realistically comes from spiders) are left out. Fishing and mud are also left out
+when the finished terrain scan found no water in the play area.
 
 ### Map
 
@@ -261,8 +278,9 @@ The scripts use the stable Script API (`@minecraft/server` 2.0.0 and `@minecraft
 
 ### Automated tests
 
-The pure-JavaScript parts (search-area geometry in `geometry.js`, hand rules in `hand.js`) have tests in
-`tests/`. With Node 18+: `node tests/geometry.test.js` and `node tests/hand.test.js`. Without Node, serve the
+The pure-JavaScript parts (search-area geometry in `geometry.js`, hand rules in `hand.js`, the fall and
+tool-break challenge trackers in `trackers.js`) have tests in `tests/`. With Node 18+:
+`node tests/geometry.test.js`, `node tests/hand.test.js`, `node tests/trackers.test.js`. Without Node, serve the
 repo (`python -m http.server 8765 --bind 127.0.0.1`) and open `http://127.0.0.1:8765/tests/run.html`.
 Nothing that touches the Minecraft API can be tested outside the game.
 
@@ -299,7 +317,8 @@ owner has tried it and approved it. The full steps are in [CLAUDE.md](CLAUDE.md)
 - [x] Round-robin question turns between seekers
 - [x] Parity spec P0 (correctness and integrity): conservative map blackout, capped hand, lava rule,
       teleport validation, safe morph world edits. See [docs/parity.md](docs/parity.md)
-- [ ] Parity spec P1–P4: question/challenge parity, morph polish, presets, more tests
+- [x] Parity spec P1: attributed challenge detection, 3 new challenges, safe tasks, capture presets
+- [ ] Parity spec P2–P4: morph polish, presets, more tests
 
 See [docs/game-rules.md](docs/game-rules.md) for the full reference rules gathered from the videos.
 

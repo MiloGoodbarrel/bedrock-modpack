@@ -112,20 +112,26 @@ function spotNear(hider) {
   return { x: fx, y: fy + 2, z: fz };
 }
 
+/**
+ * Places a block next to the hider. Only ever fills empty air (never replaces a block anyone built or the
+ * terrain), and only reports success if the block is really there afterwards.
+ */
 function place(hider, typeId) {
   const at = spotNear(hider);
   try {
-    hider.dimension.getBlock(at)?.setPermutation(BlockPermutation.resolve(typeId));
-    return true;
+    const block = hider.dimension.getBlock(at);
+    if (!block?.isAir) return false;
+    block.setPermutation(BlockPermutation.resolve(typeId));
+    return hider.dimension.getBlock(at)?.typeId === typeId;
   } catch {
     return false;
   }
 }
 
+/** Spawns an entity next to the hider; true only if it really appeared. */
 function spawnNear(hider, typeId) {
   try {
-    hider.dimension.spawnEntity(typeId, spotNear(hider));
-    return true;
+    return !!hider.dimension.spawnEntity(typeId, spotNear(hider))?.isValid;
   } catch {
     return false;
   }

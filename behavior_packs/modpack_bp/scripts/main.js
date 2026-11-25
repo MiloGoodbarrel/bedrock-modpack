@@ -1,6 +1,7 @@
 import { world, system } from "@minecraft/server";
 import * as game from "./game.js";
 import * as bots from "./bots.js";
+import * as watch from "./challengewatch.js";
 import { openMenu } from "./ui.js";
 
 // Punching the hider (person or bot) finds them.
@@ -16,12 +17,23 @@ world.afterEvents.playerBreakBlock.subscribe((event) => {
   game.onBlockHit(event.player, event.block.location, event.block.dimension);
 });
 
-// Challenge detection: babies born, golems built, TNT lit, bone meal / water bottles used on blocks.
+// Challenge detection (challengewatch.js): who fed chickens, threw eggs, placed a golem's pumpkin or lit TNT,
+// and whether using an item on a block really changed it. Optional subscriptions (?.) so a missing event on
+// some game version can't stop the whole add-on from loading.
 world.afterEvents.entitySpawn.subscribe((event) => {
   game.onEntitySpawn(event.entity, event.cause);
 });
+world.beforeEvents.playerInteractWithBlock?.subscribe((event) => {
+  watch.beforeUseOnBlock(event.player, event.block, event.itemStack);
+});
 world.afterEvents.playerInteractWithBlock.subscribe((event) => {
-  game.onUseOnBlock(event.player, event.block, event.itemStack);
+  game.onUseOnBlock(event.player, event.block, event.beforeItemStack ?? event.itemStack);
+});
+world.afterEvents.playerPlaceBlock?.subscribe((event) => {
+  watch.onPlace(event.player, event.block);
+});
+world.afterEvents.playerInteractWithEntity?.subscribe((event) => {
+  watch.onInteractEntity(event.player, event.target, event.beforeItemStack ?? event.itemStack);
 });
 
 // Bot entities left behind in chunks that were unloaded get cleaned up when they load again.
@@ -41,6 +53,7 @@ world.afterEvents.playerSpawn.subscribe((event) => {
 });
 
 world.afterEvents.itemUse.subscribe((event) => {
+  watch.onItemUse(event.source, event.itemStack); // eggs, for the hatch-a-chicken challenge
   if (event.itemStack?.typeId !== game.MENU_ITEM) return;
   const player = event.source;
   system.run(() => openMenu(player));

@@ -11,6 +11,7 @@ import * as map from "./map.js";
 import * as powerups from "./powerups.js";
 import * as terrain from "./terrain.js";
 import * as skylines from "./skylines.js";
+import * as watch from "./challengewatch.js";
 import { bonusSeconds } from "./cards.js";
 import { challengeById } from "./challenges.js";
 
@@ -1142,11 +1143,11 @@ function enforceBorder() {
 }
 
 export function onEntitySpawn(entity, cause) {
-  powerups.onSpawn(entity, cause);
+  watch.onSpawn(entity, cause);
 }
 
 export function onUseOnBlock(player, block, item) {
-  powerups.onUseOnBlock(player, block, item);
+  watch.onUseOnBlock(player, block, item);
 }
 
 /** Ends the current round. finder is anything with a name (Player or bot), or undefined (forced). */
@@ -1448,6 +1449,7 @@ function tickSeeking() {
   setBoardScore(id, (state.scores[id] ?? 0) + currentScore()); // total so far, including earlier rotations
 
   powerups.tickSecond();
+  watch.tickSecond();
   if (state.phase !== "seeking") return;
 
   for (const id2 of Object.keys(state.tp ?? {})) if (state.tp[id2] > 0) state.tp[id2]--;
@@ -1527,20 +1529,31 @@ export function canSee(seeker, hider) {
   }
 }
 
+const sightStreak = new Map(); // seeker id -> consecutive checks with the hider in view
+
 /** Runs a few times per second: seekers (people and bots) spotting the hider. */
 export function tickFast() {
   if (!loaded || state.phase !== "seeking") return;
   const hider = hiderTarget();
   if (!hider) return;
   if (!isBotId(hiderId())) leashHider(hider);
+  const mode = state.rules?.captureMode ?? "sight";
   if (state.disguise?.applied) {
     // Disguised hiders are only found by hitting them, so no line-of-sight check.
     pinDecoy(hider);
-  } else {
+  } else if (mode !== "hit") {
+    // "sight": spotted the moment a seeker looks at them. "sustained": they must stay in view for a while.
+    const need = mode === "sustained" ? CONFIG.sustainedSightChecks : 1;
     for (const seeker of onlineSeekers()) {
-      if (canSee(seeker, hider)) return found(seeker);
+      const streak = canSee(seeker, hider) ? (sightStreak.get(seeker.id) ?? 0) + 1 : 0;
+      sightStreak.set(seeker.id, streak);
+      if (streak >= need) {
+        sightStreak.clear();
+        return found(seeker);
+      }
     }
   }
+  watch.tickFast();
   bots.tickFast(hider);
 }
 

@@ -8,7 +8,17 @@ import * as powerups from "./powerups.js";
 import { CATEGORIES, findQuestion } from "./questions.js";
 import { checkSpotRules, formatRules } from "./rules.js";
 import { CONFIG } from "./config.js";
-import { getSettings, saveSettings, isAdmin, describeSettings, MORPH_TYPES, HEIGHT_LIMITS, FILL_MODES, ROTATIONS } from "./settings.js";
+import {
+  getSettings,
+  saveSettings,
+  isAdmin,
+  describeSettings,
+  MORPH_TYPES,
+  HEIGHT_LIMITS,
+  FILL_MODES,
+  ROTATIONS,
+  CAPTURE_MODES,
+} from "./settings.js";
 import { MOBS, BLOCKS, heldBlock, prettyId } from "./disguise.js";
 import { legend, cellBlocks } from "./map.js";
 import { cardName, cardDesc, cardIcon, cardColor, bonusSeconds } from "./cards.js";
@@ -172,10 +182,13 @@ async function settingsMenu(player) {
       defaultValue: s.zoomKit,
     })
     .toggle("Line up the play area with zoomed-out maps (moves the start point)", { defaultValue: s.alignToMap })
+    .dropdown("How seekers find a hider (disguised hiders always have to be hit)", CAPTURE_MODES.map(([, label]) => label), {
+      defaultValueIndex: Math.max(0, CAPTURE_MODES.findIndex(([id]) => id === s.captureMode)),
+    })
     .submitButton("Save");
   const res = await show(form, player);
   if (!res || res.canceled || !res.formValues) return;
-  const [morph, morphType, height, allowWater, peaceful, rotations, fill, zoomKit, alignToMap] = res.formValues;
+  const [morph, morphType, height, allowWater, peaceful, rotations, fill, zoomKit, alignToMap, capture] = res.formValues;
   const next = {
     morph: !!morph,
     morphType: MORPH_TYPES[morphType]?.[0] ?? "both",
@@ -186,6 +199,7 @@ async function settingsMenu(player) {
     fillMode: FILL_MODES[fill]?.[0] ?? "off",
     zoomKit: !!zoomKit,
     alignToMap: !!alignToMap,
+    captureMode: CAPTURE_MODES[capture]?.[0] ?? "sight",
   };
   saveSettings(next);
   player.sendMessage("§dSettings saved. They apply from the next game started:");
@@ -212,7 +226,8 @@ function howToPlay(player) {
       "a bee, a block next to them.",
     "Each question and task can be asked once per round (asked ones are greyed out), and each challenge " +
       "can only be played once per round.",
-    "Look straight at the hider with nothing in the way, or hit them, to find them.",
+    "Look straight at the hider with nothing in the way, or hit them, to find them (the admin can change " +
+      "this to keeping them in view for a second, or hitting only).",
     `Seekers can teleport from the menu once every ${game.fmt(CONFIG.teleportCooldownSeconds)}, ` +
       "to a teammate or to coordinates, but not into ruled-out areas or during a challenge.",
     "The hider sees every seeker's direction and distance above their hotbar.",

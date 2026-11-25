@@ -27,6 +27,13 @@ export function fillBlock(mode) {
   return m?.[2] ? { type: m[2], states: m[3], fallback: m[4] } : undefined;
 }
 
+// How seekers find a hider who isn't disguised (disguised hiders always have to be hit).
+export const CAPTURE_MODES = [
+  ["sight", "Look at them or hit them"],
+  ["sustained", "Keep them in view for a second, or hit them"],
+  ["hit", "Hit them only"],
+];
+
 // How many times the whole group rotates through hiding. After everyone has hidden, everyone is moved to a new
 // random location with a new border and it starts again; scores add up.
 export const ROTATIONS = [1, 2, 3, 4, 5];
@@ -38,6 +45,7 @@ const DEFAULTS = {
   allowWater: false,
   peaceful: false, // hostile mobs are on by default; the admin can switch to Peaceful
   rotations: 3,
+  captureMode: "sight",
   fillMode: "wool_slab",
   zoomKit: false,
   alignToMap: false,
@@ -90,6 +98,7 @@ export function describeSettings(s) {
     `Hide in water: ${s.allowWater ? "Yes" : "No"}`,
     `Hostile mobs: ${s.peaceful ? "Off (Peaceful)" : "On"}`,
     `Rotations: ${rot}${rot > 1 ? " (new random location each time)" : ""}`,
+    `Finding the hider: ${CAPTURE_MODES.find(([id]) => id === s.captureMode)?.[1] ?? CAPTURE_MODES[0][1]}`,
     `Sky fill on maps: ${FILL_MODES.find(([id]) => id === s.fillMode)?.[1] ?? "Off"}`,
     `Map station: ${s.zoomKit ? "Yes" : "No"}${s.alignToMap ? " · play area lined up with maps" : ""}`,
   ].join("\n");

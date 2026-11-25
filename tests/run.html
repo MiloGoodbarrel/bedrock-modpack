@@ -22,6 +22,13 @@
   } catch (e) {
     results.push(["hand", { passed: false, fails: [String(e)] }]);
   }
+  try {
+    const t = await import("../behavior_packs/modpack_bp/scripts/trackers.js");
+    const { runTrackerTests } = await import("./trackers.test.js");
+    results.push(["trackers", runTrackerTests(t)]);
+  } catch (e) {
+    results.push(["trackers", { passed: false, fails: [String(e)] }]);
+  }
   window.testResults = results;
   out.textContent = results.map(([n, r]) => `${n}: ${r.passed ? "PASS" : "FAIL " + r.fails.join("; ")}`).join("\n");
 </script>
