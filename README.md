@@ -11,7 +11,7 @@ ConnorIGL on YouTube. This is an independent rebuild for Bedrock. No code or ass
 Works on Windows, Xbox, PlayStation, Switch, mobile and Realms. **No experimental toggles needed.**
 Requires Minecraft Bedrock **1.21.90 or newer**.
 
-> **Status:** early development (v0.31.1). Every feature below is written, but none of it has been playtested
+> **Status:** early development (v0.31.2). Every feature below is written, but none of it has been playtested
 > in game yet, so expect bugs. Please report anything that shows up in the Content Log (Settings → Creator).
 
 ## How to play
@@ -93,7 +93,9 @@ With morph mode on, the hider picks a disguise from the menu before locking in:
   armor and held items, so the hider's armor and off-hand item go into their inventory and their hands are
   kept empty for the whole round.
 - **Block:** the chosen block (from a list, or whatever block you're holding) appears where the hider stands,
-  and the hider watches from inside it. It can't be the same as any block touching it, and it only goes
+  and the hider watches from inside it. It can be any block except one touching the hider (above, below or
+  on any of the 4 sides): those are greyed out in the menu, can't be picked, and are checked again at lock-in
+  (rule **Unlike Neighbours**). It only goes
   where there's room (air, water or small plants, which come back afterwards). If the block is knocked out
   of place some other way than a seeker breaking it (a sand or gravel disguise falling, an explosion, a
   piston), the hider counts as found. Blocks are placed facing their default direction.
@@ -128,6 +130,7 @@ background, so they never load far-off chunks.
 | In the Overworld | Games are Overworld-only |
 | Inside Play Area | Within the 1000×1000 square around the start point |
 | Room for the Block | Block morph only: nothing solid where the disguise block goes |
+| Unlike Neighbours | Block morph only: the disguise isn't the same block as any of the 6 blocks touching the hider |
 
 Once locked in, the hider is frozen in place but **stays in Creative, with access to every item**. They can
 look around and use, place or break blocks within reach, but they can't walk or fly away (anything that moves

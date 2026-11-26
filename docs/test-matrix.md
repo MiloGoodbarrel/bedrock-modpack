@@ -96,6 +96,7 @@ For each: confirm it completes when a seeker really does it, and does NOT comple
 - [ ] Mob morph: armor and the off-hand map go into the inventory; nothing floats; held items get put away;
       the mob stays on the hider and turns with them; hitting the mob finds the hider.
 - [ ] Mob morph: does an invisible player cast a shadow? (Can't be controlled from scripts; just note it.)
+- [ ] Block morph menu: blocks touching the hider are greyed out ("touching you") and picking one is refused with a message; any other block can be picked. Picking a block, then moving next to that block, fails Unlike Neighbours at lock-in.
 - [ ] Block morph: the block appears; it must differ from all 6 neighbours; no room (e.g. a slab) blocks
       lock-in; hitting or breaking it finds the hider; the original block (e.g. grass) comes back afterwards.
 - [ ] Block morph with sand/gravel: break the block under it so it falls → counts as found.

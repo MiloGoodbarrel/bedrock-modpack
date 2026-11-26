@@ -27,7 +27,7 @@ import {
   addAdmin,
   removeAdmin,
 } from "./settings.js";
-import { MOBS, BLOCKS, heldBlock, prettyId } from "./disguise.js";
+import { MOBS, BLOCKS, heldBlock, prettyId, neighbourTypes } from "./disguise.js";
 import { legend, cellBlocks, ROW_LETTERS } from "./map.js";
 import { cardName, cardDesc, cardIcon, cardColor, bonusSeconds } from "./cards.js";
 import { challengeById } from "./challenges.js";
@@ -404,11 +404,17 @@ function mobMenu(player) {
 function blockMenu(player) {
   const body =
     "Once you lock in, this block appears where you stand and you watch from inside it. " +
-    "It can't match any block touching it. Seekers find you by hitting or breaking it.";
+    "It can be any block except one touching you (above, below or on any side). Seekers find you by hitting or breaking it.";
   const buttons = [];
+  // Blocks touching the hider right now can't be picked (checked again at lock-in, in case they move).
+  const touching = neighbourTypes(player.dimension, player.location);
+  const option = (id, label) =>
+    touching.includes(id)
+      ? [`§8${label}\n§8touching you: pick another`, () => game.chooseDisguise(player, "block", id)]
+      : [label, () => game.chooseDisguise(player, "block", id)];
   const held = heldBlock(player);
-  if (held) buttons.push([`Block in my hand (${prettyId(held)})`, () => game.chooseDisguise(player, "block", held)]);
-  for (const [id, label] of BLOCKS) buttons.push([label, () => game.chooseDisguise(player, "block", id)]);
+  if (held) buttons.push(option(held, `Block in my hand (${prettyId(held)})`));
+  for (const [id, label] of BLOCKS) buttons.push(option(id, label));
   buttons.push(["Back", () => hiderBuildMenu(player), ICON.back]);
   return menu(player, "Become a block", body, buttons);
 }
