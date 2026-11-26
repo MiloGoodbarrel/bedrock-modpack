@@ -741,6 +741,10 @@ export function chooseDisguise(player, kind, type) {
   if (state.phase !== "hiding" || player.id !== hiderId() || !state.rules?.morph) return;
   if (state.rules.morphType !== "both" && state.rules.morphType !== kind) return;
   if (kind === "block" && isUnbreakable(type)) return tell(player, "§cUnbreakable blocks can't be a disguise.");
+  // A block disguise can't be the same block as one touching the hider (it would blend in too well).
+  if (kind === "block" && disguise.neighbourTypes(player.dimension, player.location).includes(type)) {
+    return tell(player, `§c${disguise.prettyId(type)} is touching you, so it can't be your disguise. Pick any other block, or move.`);
+  }
   state.disguise = { kind, type, applied: false, entityId: null };
   save();
   tell(player, `§dYou'll become ${disguise.prettyId(type)} when you lock in.`);
