@@ -13,7 +13,7 @@ import * as powerups from "./powerups.js";
 import * as terrain from "./terrain.js";
 import * as skylines from "./skylines.js";
 import * as watch from "./challengewatch.js";
-import { bonusSeconds } from "./cards.js";
+import { roundScore, rankings as rankScores } from "./scoring.js";
 import { challengeById } from "./challenges.js";
 
 export const MENU_ITEM = "hs:menu";
@@ -365,7 +365,13 @@ function restoreCoordinates() {
 
 /** Hide time so far: seconds hidden, minus any overtime penalty, plus time-bonus cards in hand. */
 export function currentScore() {
-  return Math.max(0, state.hiderSeconds - state.overtime * CONFIG.overtimePenaltyPerSecond + bonusSeconds(state.hand));
+  return roundScore({
+    hiderSeconds: state.hiderSeconds,
+    overtime: state.overtime,
+    penaltyPerSecond: CONFIG.overtimePenaltyPerSecond,
+    hand: state.hand,
+    handSize: CONFIG.handSize,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1332,9 +1338,7 @@ function endGame() {
 }
 
 export function rankings() {
-  return state.players
-    .map((p) => ({ name: p.name, seconds: state.scores[p.id] ?? 0 }))
-    .sort((a, b) => b.seconds - a.seconds);
+  return rankScores(state.players, state.scores);
 }
 
 /** Back to the lobby, keeping the joined people (bots are removed). */

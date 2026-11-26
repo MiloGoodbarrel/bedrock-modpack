@@ -69,6 +69,7 @@ export function ask(asker, questionId) {
   if (!found || !hider) return false;
   const { category, question } = found;
 
+  if (question.available?.() === false) return false; // not answerable on this game version
   // Each question (and task) can be asked once per hider's round.
   if (s.used.includes(questionId)) return false;
   s.used.push(questionId);

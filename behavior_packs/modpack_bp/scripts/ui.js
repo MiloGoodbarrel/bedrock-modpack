@@ -1,11 +1,11 @@
 // All menus. Opened with the Extreme Hide & Seek Menu item. Bedrock forms are lists of buttons, so the Java mod's tabbed
 // screen becomes a hub with icon buttons (Questions / Clues / Map / Hand), and the question board shows every
 // category and question, with ones already asked this round greyed out.
-import { system } from "@minecraft/server";
+import { system, world } from "@minecraft/server";
 import { ActionFormData, MessageFormData, ModalFormData, FormCancelationReason } from "@minecraft/server-ui";
 import * as game from "./game.js";
 import * as powerups from "./powerups.js";
-import { CATEGORIES, findQuestion } from "./questions.js";
+import { CATEGORIES, findQuestion, availableQuestions } from "./questions.js";
 import { checkSpotRules, formatRules } from "./rules.js";
 import { CONFIG } from "./config.js";
 import {
@@ -21,6 +21,11 @@ import {
   PRESETS,
   presetSettings,
   matchingPreset,
+  adminList,
+  hasAnyAdmin,
+  claimAdmin,
+  addAdmin,
+  removeAdmin,
 } from "./settings.js";
 import { MOBS, BLOCKS, heldBlock, prettyId } from "./disguise.js";
 import { legend, cellBlocks, ROW_LETTERS } from "./map.js";
@@ -166,20 +171,60 @@ function lobbyMenu(player) {
     buttons.push(["§6Start game\n§8(starts here, at your position)", () => game.start(player), ICON.map]);
   }
   if (isAdmin(player)) buttons.push(["§dGame settings\n§8(admin)", () => settingsMenu(player), ICON.options]);
+  else if (!hasAnyAdmin()) {
+    buttons.push([
+      "§dBecome admin\n§8no admin yet: the first to claim runs the settings",
+      async () => {
+        if (!(await confirm(player, "Become admin", "This world has no admin yet. Become the admin? You'll manage the game settings and can add other admins."))) return lobbyMenu(player);
+        if (claimAdmin(player)) player.sendMessage("§dYou're now this world's admin. Game settings are in the lobby menu.");
+        return lobbyMenu(player);
+      },
+      ICON.options,
+    ]);
+  }
   buttons.push(["How to play", () => howToPlay(player), ICON.questions]);
   return menu(player, "Extreme Hide & Seek", body, buttons);
 }
 
 /** Admin settings hub: one-tap presets, or every setting by hand. */
 function settingsMenu(player) {
-  if (!isAdmin(player)) return player.sendMessage("§cOnly the world's admin (an operator) can change settings.");
+  if (!isAdmin(player)) return player.sendMessage("§cOnly this world's admins can change settings.");
   if (game.state.phase !== "lobby") return player.sendMessage("§cSettings can only be changed in the lobby.");
   const body = `§7${describeSettings(getSettings())}§r\n\nPick a preset, or set everything yourself.`;
   return menu(player, "Game settings", body, [
     ["§l§dPresets§r\n§8Classic, morph modes, Extended, Solo", () => presetMenu(player), ICON.questions],
     ["§lCustom settings§r\n§8every option", () => customSettingsMenu(player), ICON.options],
+    ["§lAdmins§r\n§8who can change settings", () => adminsMenu(player), ICON.lock],
     back(player),
   ]);
+}
+
+/** Add or remove admins among the players who are online. */
+function adminsMenu(player) {
+  if (!isAdmin(player)) return;
+  const list = adminList();
+  const saved = new Set(list.map((a) => a.id));
+  const body =
+    `Saved admins: ${list.length ? list.map((a) => a.name).join(", ") : "none"}\n` +
+    "§7Anyone tagged hs_admin also counts. Tap an online player to add or remove them.§r";
+  const buttons = world.getAllPlayers().map((p) => {
+    const is = saved.has(p.id);
+    return [
+      `${is ? "§a✔ " : ""}${p.name}\n§8${is ? "admin: tap to remove" : "tap to make admin"}`,
+      () => {
+        if (is) {
+          if (!removeAdmin(p.id)) player.sendMessage("§cThe last admin can't be removed.");
+          else player.sendMessage(`§d${p.name} is no longer an admin.`);
+        } else {
+          addAdmin(p);
+          player.sendMessage(`§d${p.name} is now an admin.`);
+        }
+        return adminsMenu(player);
+      },
+    ];
+  });
+  buttons.push(["Back", () => settingsMenu(player), ICON.back]);
+  return menu(player, "Admins", body, buttons);
 }
 
 function presetMenu(player) {
@@ -472,9 +517,10 @@ function boardMenu(player, preview = false) {
     "Answers are about where YOU are standing.\n" +
     "Every question earns the hider powerups. §7Each question and task can be asked once per round.§r";
   const buttons = CATEGORIES.map((cat) => {
-    const left = cat.questions.filter((q) => !s.used.includes(q.id)).length;
+    const qs = availableQuestions(cat);
+    const left = qs.filter((q) => !s.used.includes(q.id)).length;
     return [
-      `${cat.color}§l${cat.name}§r §8${left}/${cat.questions.length} left\n§8Hider: ${cat.reward}`,
+      `${cat.color}§l${cat.name}§r §8${left}/${qs.length} left\n§8Hider: ${cat.reward}`,
       () => categoryMenu(player, cat, preview),
       cat.icon,
     ];
@@ -486,7 +532,7 @@ function boardMenu(player, preview = false) {
 function categoryMenu(player, category, preview = false) {
   const s = game.state;
   const blocked = preview ? "Questions open once the hider locks in." : game.canAsk(player);
-  const buttons = category.questions.map((q) => {
+  const buttons = availableQuestions(category).map((q) => {
     const used = s.used.includes(q.id);
     const label = used ? `§8${q.text}\n§8✔ already asked this round` : `${q.text}`;
     return [

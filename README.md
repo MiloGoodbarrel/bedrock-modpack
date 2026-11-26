@@ -11,7 +11,7 @@ ConnorIGL on YouTube. This is an independent rebuild for Bedrock. No code or ass
 Works on Windows, Xbox, PlayStation, Switch, mobile and Realms. **No experimental toggles needed.**
 Requires Minecraft Bedrock **1.21.90 or newer**.
 
-> **Status:** early development (v0.27.0). Every feature below is written, but none of it has been playtested
+> **Status:** early development (v0.28.0). Every feature below is written, but none of it has been playtested
 > in game yet, so expect bugs. Please report anything that shows up in the Content Log (Settings → Creator).
 
 ## How to play
@@ -34,9 +34,15 @@ Requires Minecraft Bedrock **1.21.90 or newer**.
 
 ### Admin settings
 
-The world's admin (anyone with operator permission, which includes the owner in single player and on a
-Realm) gets a **Game settings** button in the lobby. Settings are saved with the world and lock in when a
-game starts.
+The world's admin gets a **Game settings** button in the lobby. Settings are saved with the world and lock in
+when a game starts.
+
+**Who's the admin?** The Script API version this add-on uses (2.0.0) has no way to check whether a player is an
+operator, so the add-on keeps its own admin list:
+- While a world has no admin, the lobby shows **Become admin**, and the first person to press it gets it.
+  Set this up on your PC before uploading the world to a Realm, and it carries over.
+- Admins can add or remove other admins under Game settings → Admins. The last admin can't be removed.
+- On game versions that do report operator status, operators count as admins too.
 
 | Setting | Options |
 |---|---|
@@ -51,7 +57,7 @@ game starts.
 | Map station | Chest + cartography table at the start, refilled with blank maps and paper each round |
 | Line up the play area with zoomed-out maps | Moves the start point so one zoomed-out map covers the play area |
 
-To make someone an admin without operator permission, run `/tag <name> add hs_admin`.
+You can also make someone an admin with `/tag <name> add hs_admin`.
 
 **Presets** (Game settings → Presets) set everything in one tap. You can still tweak them afterwards under
 Custom settings:
@@ -289,7 +295,8 @@ The scripts use the stable Script API (`@minecraft/server` 2.0.0 and `@minecraft
 - `scripts/game.js`: game state, turns, scoring and found detection
 - `scripts/bots.js`: AI players for solo games
 - `scripts/disguise.js`: mob and block morphs
-- `scripts/settings.js`, `settingsmodel.js`: admin game settings, presets and migration
+- `scripts/settings.js`, `settingsmodel.js`: admin game settings and admins, presets and migration
+- `scripts/scoring.js`: the score formula and rankings
 - `scripts/map.js`, `terrain.js`: the menu map and the background terrain scan
 - `scripts/skylines.js`: red sky lines that show the search area on real map items
 - `scripts/powerups.js`, `cards.js`, `challenges.js`: answers, hider cards, Cancel and challenges
@@ -310,11 +317,20 @@ The scripts use the stable Script API (`@minecraft/server` 2.0.0 and `@minecraft
 
 ### Automated tests
 
-The pure-JavaScript parts (search-area geometry in `geometry.js`, hand rules in `hand.js`, the fall and
-tool-break challenge trackers in `trackers.js`, settings migration and presets in `settingsmodel.js`) have tests in `tests/`. With Node 18+:
-`node tests/geometry.test.js`, `node tests/hand.test.js`, `node tests/trackers.test.js`, `node tests/settings.test.js`. Without Node, serve the
-repo (`python -m http.server 8765 --bind 127.0.0.1`) and open `http://127.0.0.1:8765/tests/run.html`.
-Nothing that touches the Minecraft API can be tested outside the game.
+Serve the repo (`python -m http.server 8765 --bind 127.0.0.1`) and open
+`http://127.0.0.1:8765/tests/run.html`. The page runs every suite and its title turns PASS or FAIL:
+
+| Suite | Covers |
+|---|---|
+| geometry | Map blackout (never blacks out a possible spot), boundaries, the clue log's area share |
+| hand | The 5-card limit, discards, merged offers, auto-pick |
+| trackers | Fall-100 and break-an-iron-tool detection, teleports and deaths excluded |
+| settings | Settings migration from older saves, invalid values, all six presets |
+| rules + questions + scoring + cards | Spot rules (dry, lava, sea level, sky light, play area, block morph), observation answers, tasks never overwriting blocks, the score formula, card drawing. These run the real modules against a fake Minecraft world (`tests/mocks/`) |
+
+The pure suites also run under Node 18+ (`node tests/geometry.test.js` and so on). The mock-world suite needs
+the browser, because it uses an import map. Anything else that touches Minecraft can only be checked in game:
+see [docs/test-matrix.md](docs/test-matrix.md) for the in-game checklist.
 
 Backup commands (these need cheats on): `/scriptevent hs:menu` opens the menu, `hs:give` gives the menu book,
 `hs:skip` ends the current turn, and `hs:reset` returns everyone to the lobby.
@@ -352,7 +368,7 @@ owner has tried it and approved it. The full steps are in [CLAUDE.md](CLAUDE.md)
 - [x] Parity spec P1: attributed challenge detection, 3 new challenges, safe tasks, capture presets
 - [x] Parity spec P2: morph polish (no floating gear, safe decoys, moved-block capture, reconnect cleanup)
 - [x] Parity spec P3: presets, settings migration, map-square teleport, clue log
-- [ ] Parity spec P4: release checks and the in-game test matrix
+- [x] Parity spec P4: API check against 2.0.0, admin claim fix, build fix, mock-world tests, in-game test matrix
 
 See [docs/game-rules.md](docs/game-rules.md) for the full reference rules gathered from the videos.
 

@@ -49,9 +49,18 @@ line given in the session instructions.
 - Pure-JS tests: `node tests/geometry.test.js` / `node tests/hand.test.js` with Node, or serve the repo with
   `python -m http.server 8765 --bind 127.0.0.1` and open `http://127.0.0.1:8765/tests/run.html` in the
   browser (Claude in Chrome can read the result).
-- Syntax check without Node: from that same page, fetch each `behavior_packs/modpack_bp/scripts/*.js`, strip
-  the `import` lines and the `export` keywords, and parse it with `new Function(...)`.
-- Anything that uses the Minecraft API can only be verified in game: the owner tests the test pack.
+  The page title becomes PASS or FAIL. It maps `@minecraft/server` / `@minecraft/server-ui` to fakes in
+  `tests/mocks/` with an import map, so real modules (rules, questions, cards...) run against a fake world.
+- Syntax and load check without Node: from that same page, (1) fetch each `behavior_packs/modpack_bp/scripts/*.js`,
+  strip `import` lines, `export { ... } from` lines and `export` keywords, and parse it with `new Function(...)`;
+  (2) `await import()` every script, which links all imports/exports for real against the mocks.
+- New tests: confirm they can fail (run them once against a deliberately broken copy) before trusting a pass.
+- API check: verify any new Minecraft API member against the pinned version's type definitions
+  (`https://unpkg.com/@minecraft/server@2.0.0/index.d.ts`, read in the browser). Members missing from 2.0.0
+  must be feature-checked at runtime, never assumed.
+- `tools\build.ps1` checks its own output (forward-slash zip entries, manifests and main.js present).
+- Anything that uses the Minecraft API can only be verified in game: the owner tests the test pack, using
+  docs/test-matrix.md as the checklist.
 
 ## Notes
 
