@@ -68,7 +68,7 @@ export function cardColor(c) {
 }
 
 export function cardDesc(c) {
-  if (c.type === "time") return `+${c.minutes} minutes to your hide time while it's in your hand.`;
+  if (c.type === "time") return `Play it to add ${c.minutes} minutes to your hide time. Unplayed time bonuses are lost when you're found.`;
   if (c.type === "cancel") return "Block a question right after it's asked. The seekers get no answer.";
   return `Seekers must "${challengeById(c.challenge)?.desc ?? "?"}" before they can ask another question.`;
 }

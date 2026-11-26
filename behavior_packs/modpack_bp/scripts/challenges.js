@@ -7,7 +7,12 @@
 //   needsWater: only dealt if the play area has water (when the terrain scan says there's none, it's skipped)
 //
 // Detection is credited to the seeker who did it wherever the API allows (see challengewatch.js). Where it
-// can't be (fish, bread), it's an inventory count that went up, which a chest or a teammate could also cause.
+// can't be (fish, glazed terracotta), it's an inventory count that went up, which a chest or a teammate could
+// also cause. The list matches the original mod's 18 challenges.
+
+const COLORS = ["white", "orange", "magenta", "light_blue", "yellow", "lime", "pink", "gray", "light_gray", "silver",
+  "cyan", "purple", "blue", "brown", "green", "red", "black"];
+const GLAZED_TERRACOTTA = COLORS.map((c) => `minecraft:${c}_glazed_terracotta`);
 
 export const CHALLENGES = [
   {
@@ -28,11 +33,10 @@ export const CHALLENGES = [
     needsWater: true,
   },
   {
-    id: "breed_chickens",
-    name: "Breed chickens",
-    desc: "Feed seeds to two chickens so a baby chicken is born.",
+    id: "breed_animals",
+    name: "Breed animals",
+    desc: "Feed two animals of the same kind so a baby is born.",
     detect: "bred",
-    mob: "minecraft:chicken",
   },
   {
     id: "hatch_chicken",
@@ -47,9 +51,9 @@ export const CHALLENGES = [
     detect: "bonemeal",
   },
   {
-    id: "iron_golem",
-    name: "Build an iron golem",
-    desc: "Build an iron golem from iron blocks and a carved pumpkin.",
+    id: "create_golem",
+    name: "Create a golem",
+    desc: "Build an iron golem or a snow golem (finish it with a carved pumpkin).",
     detect: "golem",
   },
   {
@@ -74,15 +78,60 @@ export const CHALLENGES = [
   {
     id: "break_iron_tool",
     name: "Break an iron tool",
-    desc: "Use an iron pickaxe, axe, shovel, hoe or sword until it breaks.",
+    desc: "Use an iron pickaxe, axe, shovel, hoe or sword, shears, or flint and steel until it breaks.",
     detect: "toolBreak",
   },
   {
-    id: "bread",
-    name: "Bake bread",
-    desc: "Any seeker crafts or finds a loaf of bread.",
+    id: "dye_something",
+    name: "Dye something",
+    desc: "Use a dye on a sheep, a cat's or wolf's collar, or a sign.",
+    detect: "dye",
+  },
+  {
+    id: "glazed_terracotta",
+    name: "Get glazed terracotta",
+    desc: "Any seeker gets a glazed terracotta block (smelt dyed terracotta).",
     detect: "items",
-    items: ["minecraft:bread"],
+    items: GLAZED_TERRACOTTA,
+  },
+  {
+    id: "get_poisoned",
+    name: "Get poisoned",
+    desc: "Any seeker gets the Poison effect (a spider eye, a poisonous potato, a pufferfish...).",
+    detect: "effect",
+    effect: "poison",
+  },
+  {
+    id: "mine_diamonds",
+    name: "Mine diamonds",
+    desc: "Any seeker mines a diamond ore block.",
+    detect: "mined",
+    blocks: ["minecraft:diamond_ore", "minecraft:deepslate_diamond_ore"],
+  },
+  {
+    id: "share_boat",
+    name: "Share a boat with a mob",
+    desc: "Sit in a boat together with a mob.",
+    detect: "boat",
+  },
+  {
+    id: "tame_animal",
+    name: "Tame an animal",
+    desc: "Tame a wolf, cat, parrot, horse or any other tameable animal.",
+    detect: "tame",
+  },
+  {
+    id: "write_book",
+    name: "Write and sign a book",
+    desc: "Write in a book and quill and sign it.",
+    detect: "items",
+    items: ["minecraft:written_book"],
+  },
+  {
+    id: "touch_bedrock",
+    name: "Touch bedrock",
+    desc: "Any seeker stands on bedrock.",
+    detect: "bedrock",
   },
 ];
 

@@ -9,7 +9,7 @@
 // `planar` questions depend only on x/z, so bots and the map can use them to rule out areas.
 import { BlockPermutation, ItemStack, world } from "@minecraft/server";
 import { surfaceBlock } from "./surface.js";
-import { isUnbreakable } from "./blocklists.js";
+import { isUnbreakable, lightLevel } from "./blocklists.js";
 
 // Overworld-equivalent position: Nether coordinates count 8x so north/south and distances still make sense
 // when someone is in the Nether. Plain objects without a dimension are taken as-is.
@@ -148,11 +148,85 @@ function spawnNear(hider, typeId) {
 }
 
 const ANIMALS = [
-  ["minecraft:pig", "pig"],
+  ["minecraft:bee", "bee"],
+  ["minecraft:chicken", "chicken"],
   ["minecraft:cow", "cow"],
-  ["minecraft:sheep", "sheep"],
+  ["minecraft:pig", "pig"],
   ["minecraft:rabbit", "rabbit"],
 ];
+
+const cap = (w) => w.charAt(0).toUpperCase() + w.slice(1);
+
+/** Type of the mob closest to someone (within 32 blocks), or null if there's none. Players, bots and disguises don't count. */
+function nearestMob(e) {
+  try {
+    const mobs = e.dimension
+      .getEntities({
+        location: e.location,
+        maxDistance: 32,
+        excludeTypes: ["minecraft:player", "hs:bot", "minecraft:item", "minecraft:xp_orb", "minecraft:arrow"],
+        excludeTags: ["hs_decoy"],
+      })
+      .filter((m) => m.id !== e.id && m.getComponent("minecraft:health"));
+    if (!mobs.length) return null;
+    const l = e.location;
+    const d = (m) => Math.hypot(m.location.x - l.x, m.location.y - l.y, m.location.z - l.z);
+    return mobs.sort((a, b) => d(a) - d(b))[0].typeId;
+  } catch {
+    return null;
+  }
+}
+
+/** A task question the hider performs: `spec` says what counts as done, `perform` is the automatic fallback. */
+function task(id, text, spec, done, perform) {
+  return { id, text, hiderTask: spec, doneText: () => done, perform };
+}
+
+/** Breaks one breakable block next to the hider (with the usual particles and drop), for the automatic task. */
+function breakNear(hider) {
+  const d = hider.dimension;
+  const l = hider.location;
+  const fx = Math.floor(l.x);
+  const fy = Math.floor(l.y);
+  const fz = Math.floor(l.z);
+  const sides = [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [1, 1, 0], [-1, 1, 0], [0, 1, 1], [0, 1, -1]];
+  for (const [dx, dy, dz] of shuffle(sides)) {
+    const b = getBlock(d, { x: fx + dx, y: fy + dy, z: fz + dz });
+    if (!b || b.isAir || b.isLiquid || isUnbreakable(b.typeId)) continue;
+    try {
+      d.runCommand(`setblock ${fx + dx} ${fy + dy} ${fz + dz} air destroy`);
+      return true;
+    } catch {}
+  }
+  return false;
+}
+
+/** Roughly: does light from a light-emitting block reach the hider? (brightness minus distance, no walls) */
+function inBlockLight(hider) {
+  const d = hider.dimension;
+  if (!d) return undefined;
+  const l = hider.location;
+  const fx = Math.floor(l.x);
+  const fy = Math.floor(l.y);
+  const fz = Math.floor(l.z);
+  const r = 14;
+  let missing = false;
+  for (let dx = -r; dx <= r; dx++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dz = -r; dz <= r; dz++) {
+        const dist = Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
+        if (dist > r) continue;
+        const b = getBlock(d, { x: fx + dx, y: fy + dy, z: fz + dz });
+        if (!b) {
+          missing = true;
+          continue;
+        }
+        if (lightLevel(b.typeId) - dist > 0) return true;
+      }
+    }
+  }
+  return missing ? undefined : false;
+}
 
 // --- Categories --------------------------------------------------------------
 
@@ -197,6 +271,24 @@ export const CATEGORIES = [
           return a === h ? `Yes (${prettyBiome(a)})` : `No (not ${prettyBiome(a)})`;
         },
       },
+      {
+        id: "same_block",
+        text: "Are you standing on the same type of block as me?",
+        answer: (asker, hider) => {
+          const mine = standingOn(asker)?.typeId;
+          return mine && standingOn(hider)?.typeId === mine ? `Yes (${prettyBlock(mine)})` : `No (not ${prettyBlock(mine)})`;
+        },
+      },
+      {
+        id: "same_nearest_mob",
+        text: "Are the mobs nearest to you and me the same type?",
+        answer: (asker, hider) => {
+          const mine = nearestMob(asker);
+          if (mine === null) return "Unknown (no mob near the asker to compare with)";
+          const theirs = nearestMob(hider);
+          return theirs === mine ? `Yes (${prettyBlock(mine)})` : `No (not ${prettyBlock(mine)})`;
+        },
+      },
     ],
   },
   {
@@ -229,9 +321,11 @@ export const CATEGORIES = [
     reward: "Draw 2, pick 1",
     questions: [
       {
-        id: "on_grass",
-        text: "Are you standing on grass?",
-        answer: (asker, hider) => yesNo(standingOn(hider)?.typeId === "minecraft:grass_block"),
+        id: "block_light",
+        text: "Are you in light from a block (torch, lantern, lava...)?",
+        // No light API in Script API 2.0.0: estimated from light-emitting blocks nearby (their brightness minus
+        // the distance to the hider), without walls blocking it.
+        answer: (asker, hider) => yesNo(inBlockLight(hider)),
       },
       {
         id: "on_leaves",
@@ -239,53 +333,28 @@ export const CATEGORIES = [
         answer: (asker, hider) => yesNo(/leaves/.test(standingOn(hider)?.typeId ?? "")),
       },
       {
-        id: "same_block",
-        text: "Are you standing on the same block as me?",
-        answer: (asker, hider) => {
-          const mine = standingOn(asker)?.typeId;
-          return mine && standingOn(hider)?.typeId === mine ? `Yes (${prettyBlock(mine)})` : `No (not ${prettyBlock(mine)})`;
-        },
-      },
-      {
         id: "water_near",
-        text: "Is there water within 4 blocks of you?",
+        text: "Is there water nearby? (within 4 blocks)",
         answer: (asker, hider) => yesNo(anyNear(hider, 4, (t) => t === "minecraft:water" || t === "minecraft:flowing_water")),
       },
       {
         id: "lava_near",
-        text: "Is there lava within 6 blocks of you?",
-        answer: (asker, hider) => yesNo(anyNear(hider, 6, (t) => t === "minecraft:lava" || t === "minecraft:flowing_lava")),
+        text: "Is there lava nearby? (within 4 blocks)",
+        answer: (asker, hider) => yesNo(anyNear(hider, 4, (t) => t === "minecraft:lava" || t === "minecraft:flowing_lava")),
       },
       {
         id: "snow_near",
-        text: "Is there snow within 4 blocks of you?",
+        text: "Is there snow nearby? (within 4 blocks)",
         answer: (asker, hider) => yesNo(anyNear(hider, 4, (t) => /snow/.test(t))),
       },
       {
         id: "flowers_near",
-        text: "Are there flowers within 4 blocks of you?",
+        text: "Are there flowers nearby? (within 4 blocks)",
         answer: (asker, hider) => yesNo(anyNear(hider, 4, (t) => FLOWERS.test(t))),
       },
       {
-        id: "mobs_near",
-        text: "Are there any mobs within 16 blocks of you?",
-        answer: (asker, hider) => {
-          try {
-            const mobs = hider.dimension.getEntities({
-              location: hider.location,
-              maxDistance: 16,
-              excludeTypes: ["minecraft:player", "hs:bot", "minecraft:item", "minecraft:xp_orb", "minecraft:arrow"],
-              excludeTags: ["hs_decoy"],
-            });
-            return yesNo(mobs.some((m) => m.id !== hider.id && m.getComponent("minecraft:health")));
-          } catch {
-            return "Unknown";
-          }
-        },
-      },
-      {
         id: "sky_visible",
-        text: "Is there open sky right above you?",
+        text: "Is the sky visible above you?",
         answer: (asker, hider) => {
           try {
             const l = hider.location;
@@ -306,44 +375,37 @@ export const CATEGORIES = [
     draw: 1,
     pick: 1,
     reward: "Draw 1, pick 1",
+    // The hider does each task themselves (powerups.js gives them the item and waits; their hide timer is paused
+    // meanwhile). `perform` is the automatic version, used if they run out of time, are a block disguise, or
+    // are a bot.
     questions: [
-      {
-        id: "task_firework",
-        text: "Launch a firework!",
-        perform: (hider) =>
-          spawnNear(hider, "minecraft:fireworks_rocket") ? "A firework shot up from the hider's spot!" : "The firework fizzled.",
-      },
-      {
-        id: "task_fire",
-        text: "Light a fire with a fire charge!",
-        perform: (hider) => (place(hider, "minecraft:fire") ? "A fire is burning next to the hider!" : "The fire didn't catch."),
-      },
-      {
-        id: "task_bee",
-        text: "Spawn a bee!",
-        perform: (hider) => (spawnNear(hider, "minecraft:bee") ? "A bee appeared next to the hider. Bzzz." : "No bee showed up."),
-      },
-      {
-        id: "task_animal",
-        text: "Spawn a farm animal!",
-        perform: (hider) => {
-          const [id, name] = ANIMALS[Math.floor(Math.random() * ANIMALS.length)];
-          return spawnNear(hider, id) ? `A ${name} appeared next to the hider.` : "No animal showed up.";
-        },
-      },
-      {
-        id: "task_gravel",
-        text: "Place a gravel block!",
-        perform: (hider) => (place(hider, "minecraft:gravel") ? "A gravel block was placed next to the hider." : "The gravel couldn't be placed."),
-      },
-      {
-        id: "task_sand",
-        text: "Place a sand block!",
-        perform: (hider) => (place(hider, "minecraft:sand") ? "A sand block was placed next to the hider." : "The sand couldn't be placed."),
-      },
+      task("task_break", "Break a Block", { kind: "break" }, "broke a block", (hider) =>
+        breakNear(hider) ? "A block next to the hider broke!" : "No block could be broken."),
+      task("task_grass", "Place a Grass Block", { kind: "place", block: "minecraft:grass_block" }, "placed a Grass Block", (hider) =>
+        place(hider, "minecraft:grass_block") ? "A grass block appeared next to the hider." : "The grass block couldn't be placed."),
+      task("task_gravel", "Place Gravel", { kind: "place", block: "minecraft:gravel" }, "placed Gravel", (hider) =>
+        place(hider, "minecraft:gravel") ? "A gravel block appeared next to the hider." : "The gravel couldn't be placed."),
+      task("task_sand", "Place Sand", { kind: "place", block: "minecraft:sand" }, "placed Sand", (hider) =>
+        place(hider, "minecraft:sand") ? "A sand block appeared next to the hider." : "The sand couldn't be placed."),
+      task("task_stone", "Place Stone", { kind: "place", block: "minecraft:stone" }, "placed Stone", (hider) =>
+        place(hider, "minecraft:stone") ? "A stone block appeared next to the hider." : "The stone couldn't be placed."),
+      ...ANIMALS.map(([mob, name]) =>
+        task(`task_${name}`, `Spawn a ${cap(name)}`, { kind: "spawn", mob, give: `${mob}_spawn_egg` }, `spawned a ${cap(name)}`, (hider) =>
+          spawnNear(hider, mob) ? `A ${name} appeared next to the hider.` : `No ${name} showed up.`)
+      ),
+      task("task_fire", "Use a Fire Charge", { kind: "use", item: "minecraft:fire_charge" }, "used a Fire Charge", (hider) =>
+        place(hider, "minecraft:fire") ? "A fire is burning next to the hider!" : "The fire didn't catch."),
+      task(
+        "task_firework",
+        "Use a Firework Rocket",
+        { kind: "spawn", mob: "minecraft:fireworks_rocket", give: "minecraft:firework_rocket" },
+        "used a Firework Rocket",
+        (hider) => (spawnNear(hider, "minecraft:fireworks_rocket") ? "A firework shot up from the hider's spot!" : "The firework fizzled.")
+      ),
       {
         id: "task_drop_floor",
         text: "Drop the block you're standing on!",
+        // Extension (not in the original); always done automatically.
         perform: (hider) => {
           let type = standingOn(hider)?.typeId;
           if (!type || type === "minecraft:air" || /water|lava/.test(type) || isUnbreakable(type)) type = "minecraft:dirt";
@@ -361,10 +423,13 @@ export const CATEGORIES = [
       {
         id: "task_my_block",
         text: "Place the block I'm standing on!",
+        // Extension (not in the original).
         prepare: (asker) => {
           const t = standingOn(asker)?.typeId;
           return t && t !== "minecraft:air" && !/water|lava/.test(t) && !isUnbreakable(t) ? t : "minecraft:dirt";
         },
+        hiderTask: { kind: "place", fromPayload: true },
+        doneText: (type) => `placed ${prettyBlock(type)}`,
         perform: (hider, type) =>
           place(hider, type) ? `A ${prettyBlock(type)} block was placed next to the hider.` : `The ${prettyBlock(type)} couldn't be placed.`,
       },

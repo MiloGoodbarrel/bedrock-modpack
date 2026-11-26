@@ -336,7 +336,7 @@ function howToPlay(player) {
     "§l3. Powerups§r",
     "Every question earns the hider cards (Comparing: draw 3 pick 2 · Distance: draw 2 pick 2 · " +
       `Observation: draw 2 pick 1 · Task: draw 1 pick 1). Hand limit ${CONFIG.handSize}.`,
-    "§aTime Bonus§r: +3/5/10 min while in your hand. §cCancel§r: block a question right after it's asked. " +
+    "§aTime Bonus§r: play it to add 3/5/10 min (unplayed ones are lost when you're found). §cCancel§r: block a question right after it's asked. " +
       "§6Challenge§r: seekers must do something (catch a fish, breed chickens...) before asking again.",
     "",
     "§l4. Score§r",
@@ -566,9 +566,9 @@ function spectatorMenu(player) {
 
 function hiderSeekingMenu(player) {
   const s = game.state;
-  const bonus = bonusSeconds(s.hand);
+  const bonus = s.bonusTime ?? 0; // time-bonus cards played this round
   const body = [
-    `§7Hidden for:§r §a${game.fmt(game.currentScore())}§r${bonus ? ` §7(includes +${game.fmt(bonus)} from cards)§r` : ""}`,
+    `§7Hidden for:§r §a${game.fmt(game.currentScore())}§r${bonus ? ` §7(includes +${game.fmt(bonus)} from played time bonuses)§r` : ""}`,
     `§7Your cards:§r ${s.hand.length}/${CONFIG.handSize}    §7Questions asked:§r ${s.clues.length}`,
     ...statusLines(),
     "Stay put! You're in Creative with every item, and can look around and use or place blocks, but not walk.",
@@ -588,7 +588,7 @@ function hiderSeekingMenu(player) {
 function handMenu(player) {
   const s = game.state;
   const body = s.hand.length
-    ? `Tap a card to see it or play it.\n§7Time bonuses count automatically while they're in your hand.§r`
+    ? `Tap a card to see it or play it.\n§7Time bonuses only count once you play them, so play them before you're found!§r`
     : "No cards yet. You earn powerups every time a seeker asks a question.";
   const buttons = s.hand.map((c) => [`${cardColor(c)}§l${cardName(c)}`, () => cardMenu(player, c), cardIcon(c)]);
   buttons.push(back(player));
@@ -610,7 +610,10 @@ function cardMenu(player, card) {
     const when = s.pending ? `\n\nPending: "${s.pending.text}"` : `\n\n§7You'll get a prompt the moment a question is asked.§r`;
     return menu(player, cardName(card), cardDesc(card) + when, buttons);
   }
-  return menu(player, cardName(card), cardDesc(card), [["Back", () => handMenu(player), ICON.back]]);
+  // Time bonus: played (like the original), not counted while it sits in the hand.
+  buttons.push(["§a§lPlay this time bonus", () => powerups.playTimeBonus(player, card.id), cardIcon(card)]);
+  buttons.push(["Back", () => handMenu(player), ICON.back]);
+  return menu(player, cardName(card), cardDesc(card), buttons);
 }
 
 let pickerOpen = false;

@@ -43,6 +43,8 @@ export function runTrackerTests(t) {
   check("switching slots doesn't", !t.toolBroke(iron(1, 0), { slot: 1, type: undefined }));
   check("replaced by another item doesn't", !t.toolBroke(iron(1), { slot: 0, type: "minecraft:dirt" }));
   check("diamond tool doesn't count", !t.toolBroke({ slot: 0, type: "minecraft:diamond_pickaxe", remaining: 1 }, { slot: 0 }));
+  check("shears count", t.toolBroke({ slot: 0, type: "minecraft:shears", remaining: 1 }, { slot: 0 }));
+  check("flint and steel counts", t.toolBroke({ slot: 0, type: "minecraft:flint_and_steel", remaining: 0 }, { slot: 0 }));
   check("iron sword counts", t.toolBroke({ slot: 2, type: "minecraft:iron_sword", remaining: 0 }, { slot: 2 }));
   check("no previous sample doesn't", !t.toolBroke(undefined, { slot: 0 }));
 
