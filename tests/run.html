@@ -13,7 +13,7 @@
 <pre id="out">running...</pre>
 <script type="module">
   // Runs the test suites in a browser, for machines without Node.js:
-  //   python -m http.server 8765 --bind 127.0.0.1   (from the repo root)
+  //   python tests/serve.py   (from the repo root; turns caching off so the current files are tested)
   //   then open http://127.0.0.1:8765/tests/run.html
   const out = document.getElementById("out");
   const results = [];
@@ -35,6 +35,13 @@
       questions: await import(S + "questions.js"),
       scoring: await import(S + "scoring.js"),
       cards: await import(S + "cards.js"),
+      mc: await import("./mocks/minecraft-server.js"),
+    })
+  );
+  await suite("unbreakables + land/platform (mock world)", async () =>
+    (await import("./world.test.js")).runWorldTests({
+      blocklists: await import(S + "blocklists.js"),
+      surface: await import(S + "surface.js"),
       mc: await import("./mocks/minecraft-server.js"),
     })
   );

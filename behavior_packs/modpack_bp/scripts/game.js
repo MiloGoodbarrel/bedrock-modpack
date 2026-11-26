@@ -1,8 +1,9 @@
 import * as mc from "@minecraft/server";
 import { world, system, GameMode, ItemStack, ItemLockMode, DisplaySlotId } from "@minecraft/server";
 import { CONFIG } from "./config.js";
-import { surfaceBlock } from "./surface.js";
+import { surfaceBlock, findLand, buildPlatform } from "./surface.js";
 import { constraintsFrom, areaFraction } from "./geometry.js";
+import { isUnbreakable } from "./blocklists.js";
 import { checkSpotRules, formatRules, flatPos, insidePlayArea } from "./rules.js";
 import { findQuestion } from "./questions.js";
 import { getSettings, describeSettings, morphLabel } from "./settings.js";
@@ -579,6 +580,7 @@ export function start(host) {
   forceDaylight();
   forcePeaceful();
   if (moved) broadcast(`§7The play area is lined up with the map grid: the start point is ${Math.floor(center.x)}, ${Math.floor(center.z)}.`);
+  else makeStartDry(host.dimension, false); // the host is standing in water: start on the nearest land instead
   for (const p of state.players) state.scores[p.id] = 0;
   // On with the hider masked (hider-only bar), or off for everyone.
   runCommand(`gamerule locatorbar ${CONFIG.hiderLocatorBar ? "true" : "false"}`);
@@ -590,6 +592,13 @@ export function start(host) {
   broadcast(`§7${describeSettings(state.rules).replace(/\n/g, " · ")}`);
   broadcast(`§6Hider order: ${state.order.map(nameOf).join(" → ")}`);
   startTurn(0);
+  // Nobody starts in water: the first hider is brought to the (dry) start point too if they were in water.
+  const firstHider = getPlayer(hiderId());
+  if (firstHider?.isInWater) {
+    try {
+      firstHider.teleport(state.center, { dimension: world.getDimension(state.dimId) });
+    } catch {}
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -702,6 +711,7 @@ export function disguiseHint() {
 export function chooseDisguise(player, kind, type) {
   if (state.phase !== "hiding" || player.id !== hiderId() || !state.rules?.morph) return;
   if (state.rules.morphType !== "both" && state.rules.morphType !== kind) return;
+  if (kind === "block" && isUnbreakable(type)) return tell(player, "§cUnbreakable blocks can't be a disguise.");
   state.disguise = { kind, type, applied: false, entityId: null };
   save();
   tell(player, `§dYou'll become ${disguise.prettyId(type)} when you lock in.`);
@@ -1071,6 +1081,7 @@ function settleStartPoint() {
       if (!top) return;
       c.y = top.location.y + 1;
       state.centerYKnown = true;
+      if (top.isLiquid) makeStartDry(d, true);
       save();
     } catch {
       return;
@@ -1080,6 +1091,47 @@ function settleStartPoint() {
     state.stationTurn = roundKey();
     save();
   }
+}
+
+/**
+ * Nobody starts in water. If the start point's surface is water, it moves to the nearest dry land; out in the
+ * open sea with no land in reach, a plank platform is built on the water there instead. With bringPlayers,
+ * anyone already sent to the old spot (swimming or still floating down) is moved onto the new one.
+ * Returns true if the start point changed.
+ */
+function makeStartDry(d, bringPlayers) {
+  const c = state.center;
+  let top;
+  try {
+    top = surfaceBlock(d, { x: Math.floor(c.x), z: Math.floor(c.z) });
+  } catch {
+    return false;
+  }
+  if (!top || !top.isLiquid) return false;
+  const old = { ...c };
+  const land = findLand(d, c.x, c.z, CONFIG.startLandSearch);
+  if (land) {
+    Object.assign(c, land);
+    broadcast(`§7The start point was in water, so it moved to the nearest land (${Math.floor(c.x)}, ${Math.floor(c.z)}).`);
+  } else {
+    c.y = buildPlatform(d, c.x, top.location.y, c.z, 2);
+    c.x = Math.floor(c.x) + 0.5;
+    c.z = Math.floor(c.z) + 0.5;
+    broadcast("§7The start point is out on the water, so a platform was built there.");
+  }
+  state.tablePlaced = false;
+  if (bringPlayers) {
+    for (const p of world.getAllPlayers()) {
+      if (!isJoined(p) || p.dimension.id !== d.id) continue;
+      const l = p.location;
+      if (Math.hypot(l.x - old.x, l.z - old.z) > 64) continue;
+      if (isHider(p) && state.phase === "seeking") continue; // a locked-in hider stays put
+      try {
+        p.teleport({ x: c.x, y: c.y, z: c.z }, { dimension: d });
+      } catch {}
+    }
+  }
+  return true;
 }
 
 /** A block of this type on the ground at x/z (reusing one that's already there), or undefined if unloaded. */
@@ -1101,6 +1153,15 @@ function setUpStation(d, c) {
   try {
     const x = Math.floor(c.x) + 2;
     const z = Math.floor(c.z);
+    // Never on water: if either spot is water, a small plank platform goes down first.
+    for (const sz of [z, z + 1]) {
+      const top = surfaceBlock(d, { x, z: sz });
+      if (!top) return false;
+      if (top.isLiquid) {
+        buildPlatform(d, x, top.location.y, z, 1);
+        break;
+      }
+    }
     const table = stationBlock(d, x, z, "minecraft:cartography_table");
     const chest = stationBlock(d, x, z + 1, "minecraft:chest");
     if (!table || !chest) return false;
@@ -1176,6 +1237,60 @@ export function onEntitySpawn(entity, cause) {
 
 export function onUseOnBlock(player, block, item) {
   watch.onUseOnBlock(player, block, item);
+}
+
+// --- No unbreakable blocks for the hider ---------------------------------------------
+// The hider builds in Creative, where bedrock, barriers, end portal frames and the like are all available.
+// A spot walled in with those could never be broken into, so the hider can't place them.
+
+function hiderRoundActive(player) {
+  return isHider(player) && (state.phase === "hiding" || state.phase === "seeking");
+}
+
+let lastUnbreakableWarning = 0;
+function warnUnbreakable(player) {
+  if (system.currentTick - lastUnbreakableWarning < 40) return;
+  lastUnbreakableWarning = system.currentTick;
+  system.run(() => tell(player, "§cUnbreakable blocks (bedrock, barriers, end portal frames...) can't be used while hiding."));
+}
+
+/**
+ * Before a player uses an item on a block (which is how every block placement starts). Script API 2.0.0 has
+ * no "before place" event, so this is where an unbreakable block gets stopped before it appears.
+ */
+export function beforeUseOnBlock(event) {
+  try {
+    if (hiderRoundActive(event.player) && isUnbreakable(event.itemStack?.typeId)) {
+      event.cancel = true;
+      warnUnbreakable(event.player);
+    }
+  } catch {}
+}
+
+/** Backup: if an unbreakable block still got placed by the hider, remove it again. */
+export function onPlaceBlock(player, block) {
+  try {
+    if (hiderRoundActive(player) && isUnbreakable(block?.typeId)) {
+      block.setType("minecraft:air");
+      warnUnbreakable(player);
+    }
+  } catch {}
+}
+
+/** Takes unbreakable blocks out of the hider's inventory (they keep reappearing from the Creative menu). */
+function stripUnbreakables() {
+  const id = hiderId();
+  if (isBotId(id)) return;
+  const p = getPlayer(id);
+  if (!p) return;
+  try {
+    const inv = p.getComponent("minecraft:inventory")?.container;
+    for (let i = 0; i < (inv?.size ?? 0); i++) {
+      if (isUnbreakable(inv.getItem(i)?.typeId)) inv.setItem(i, undefined);
+    }
+    const eq = p.getComponent("minecraft:equippable");
+    if (isUnbreakable(eq?.getEquipment("Offhand")?.typeId)) eq.setEquipment("Offhand", undefined);
+  } catch {}
 }
 
 /** Ends the current round. finder is anything with a name (Player or bot), or undefined (forced). */
@@ -1457,7 +1572,10 @@ export function tickSecond() {
     forcePeaceful();
     enforceBorder();
     settleStartPoint();
-    if (state.phase !== "between") confiscateCompasses();
+    if (state.phase !== "between") {
+      confiscateCompasses();
+      stripUnbreakables();
+    }
     const gameId = state.gameId;
     terrain.ensureScan(state, () => state.gameId === gameId && state.phase !== "lobby" && state.phase !== "ended");
   }

@@ -6,6 +6,7 @@
 // - Block morph: the chosen block is placed where the hider stands and the hider watches from inside it in
 //   Spectator. Hitting or breaking that block finds the hider.
 import * as mc from "@minecraft/server";
+import { isUnbreakable } from "./blocklists.js";
 
 const { world, BlockPermutation } = mc;
 
@@ -66,12 +67,12 @@ export function blockPermutation(typeId) {
   }
 }
 
-/** The block the player is holding, if it can be placed as a disguise. */
+/** The block the player is holding, if it can be placed as a disguise (never an unbreakable one). */
 export function heldBlock(player) {
   try {
     const inv = player.getComponent("minecraft:inventory")?.container;
     const item = inv?.getItem(player.selectedSlotIndex);
-    if (item && blockPermutation(item.typeId)) return item.typeId;
+    if (item && !isUnbreakable(item.typeId) && blockPermutation(item.typeId)) return item.typeId;
   } catch {}
   return undefined;
 }

@@ -24,12 +24,14 @@ world.afterEvents.entitySpawn.subscribe((event) => {
   game.onEntitySpawn(event.entity, event.cause);
 });
 world.beforeEvents.playerInteractWithBlock?.subscribe((event) => {
-  watch.beforeUseOnBlock(event.player, event.block, event.itemStack);
+  game.beforeUseOnBlock(event); // stops the hider placing unbreakable blocks (may cancel the event)
+  if (!event.cancel) watch.beforeUseOnBlock(event.player, event.block, event.itemStack);
 });
 world.afterEvents.playerInteractWithBlock.subscribe((event) => {
   game.onUseOnBlock(event.player, event.block, event.beforeItemStack ?? event.itemStack);
 });
 world.afterEvents.playerPlaceBlock?.subscribe((event) => {
+  game.onPlaceBlock(event.player, event.block); // backup: removes unbreakable blocks the hider placed
   watch.onPlace(event.player, event.block);
 });
 world.afterEvents.playerInteractWithEntity?.subscribe((event) => {

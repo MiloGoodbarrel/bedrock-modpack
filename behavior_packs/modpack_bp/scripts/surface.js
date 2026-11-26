@@ -27,6 +27,60 @@ export function skyY(dim) {
   }
 }
 
+/** True if the surface block is something you can stand on: not water/lava and not open air. */
+function isDryGround(block) {
+  return !!block && !block.isAir && !block.isLiquid && !block.isWaterlogged;
+}
+
+/**
+ * The nearest dry land to x/z: searches outward in rings (every `step` blocks, up to `maxRadius`) through loaded
+ * chunks. Returns { x, y, z } to stand on (block centre, feet height), or undefined if there's none in reach.
+ */
+export function findLand(dim, x, z, maxRadius = 96, step = 4) {
+  const tryAt = (px, pz) => {
+    let top;
+    try {
+      top = surfaceBlock(dim, { x: px, z: pz });
+    } catch {
+      return undefined; // unloaded
+    }
+    if (!isDryGround(top)) return undefined;
+    return { x: Math.floor(px) + 0.5, y: top.location.y + 1, z: Math.floor(pz) + 0.5 };
+  };
+  const here = tryAt(Math.floor(x), Math.floor(z));
+  if (here) return here;
+  for (let r = step; r <= maxRadius; r += step) {
+    let best;
+    // Walk the square ring at distance r, keeping the spot closest to the middle.
+    for (let i = -r; i <= r; i += step) {
+      for (const [dx, dz] of [[i, -r], [i, r], [-r, i], [r, i]]) {
+        const spot = tryAt(Math.floor(x) + dx, Math.floor(z) + dz);
+        if (spot && (!best || Math.hypot(dx, dz) < best.d)) best = { ...spot, d: Math.hypot(dx, dz) };
+      }
+    }
+    if (best) return { x: best.x, y: best.y, z: best.z };
+  }
+  return undefined;
+}
+
+/**
+ * Builds a flat platform of `block` centred on x/z at height y (the water's surface), size (2·radius+1)².
+ * Only fills water and air, so nothing built or natural gets replaced. Returns the y to stand on.
+ */
+export function buildPlatform(dim, x, y, z, radius = 2, block = "minecraft:oak_planks") {
+  const cx = Math.floor(x);
+  const cz = Math.floor(z);
+  for (let dx = -radius; dx <= radius; dx++) {
+    for (let dz = -radius; dz <= radius; dz++) {
+      try {
+        const b = dim.getBlock({ x: cx + dx, y, z: cz + dz });
+        if (b && (b.isAir || (b.isLiquid && !/lava/.test(b.typeId)))) b.setType(block);
+      } catch {}
+    }
+  }
+  return y + 1;
+}
+
 /**
  * The highest block at x/z that isn't part of the sky layer, like Dimension.getTopmostBlock. Throws (like
  * getTopmostBlock) if the chunk isn't loaded; undefined if the column is empty.

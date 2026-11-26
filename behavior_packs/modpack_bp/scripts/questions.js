@@ -9,6 +9,7 @@
 // `planar` questions depend only on x/z, so bots and the map can use them to rule out areas.
 import { BlockPermutation, ItemStack, world } from "@minecraft/server";
 import { surfaceBlock } from "./surface.js";
+import { isUnbreakable } from "./blocklists.js";
 
 // Overworld-equivalent position: Nether coordinates count 8x so north/south and distances still make sense
 // when someone is in the Nether. Plain objects without a dimension are taken as-is.
@@ -345,7 +346,7 @@ export const CATEGORIES = [
         text: "Drop the block you're standing on!",
         perform: (hider) => {
           let type = standingOn(hider)?.typeId;
-          if (!type || type === "minecraft:air" || /water|lava/.test(type)) type = "minecraft:dirt";
+          if (!type || type === "minecraft:air" || /water|lava/.test(type) || isUnbreakable(type)) type = "minecraft:dirt";
           const at = spotNear(hider);
           const drop = { x: at.x + 0.5, y: at.y + 0.5, z: at.z + 0.5 };
           for (const t of [type, "minecraft:dirt"]) {
@@ -362,7 +363,7 @@ export const CATEGORIES = [
         text: "Place the block I'm standing on!",
         prepare: (asker) => {
           const t = standingOn(asker)?.typeId;
-          return t && t !== "minecraft:air" && !/water|lava/.test(t) ? t : "minecraft:dirt";
+          return t && t !== "minecraft:air" && !/water|lava/.test(t) && !isUnbreakable(t) ? t : "minecraft:dirt";
         },
         perform: (hider, type) =>
           place(hider, type) ? `A ${prettyBlock(type)} block was placed next to the hider.` : `The ${prettyBlock(type)} couldn't be placed.`,

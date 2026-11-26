@@ -11,7 +11,7 @@ ConnorIGL on YouTube. This is an independent rebuild for Bedrock. No code or ass
 Works on Windows, Xbox, PlayStation, Switch, mobile and Realms. **No experimental toggles needed.**
 Requires Minecraft Bedrock **1.21.90 or newer**.
 
-> **Status:** early development (v0.28.0). Every feature below is written, but none of it has been playtested
+> **Status:** early development (v0.29.0). Every feature below is written, but none of it has been playtested
 > in game yet, so expect bugs. Please report anything that shows up in the Content Log (Settings → Creator).
 
 ## How to play
@@ -128,6 +128,16 @@ background, so they never load far-off chunks.
 Once locked in, the hider is frozen in place but **stays in Creative, with access to every item**. They can
 look around and use, place or break blocks within reach, but they can't walk or fly away (anything that moves
 them, like an ender pearl, just puts them back). They return to Survival when they're found.
+
+**No unbreakable blocks.** While hiding, the hider can't place blocks a survival player couldn't break:
+bedrock, barriers, end portal frames and portals, command and structure blocks, light blocks, reinforced
+deepslate and so on. A hideout walled in with those could never be broken into. The placement is stopped
+before the block appears, such blocks are taken out of the hider's inventory, and they can't be a block
+disguise either.
+
+**Nobody starts in water.** If the start point is on water (the host standing in a lake, or a new rotation
+spot), it moves to the nearest dry land within 96 blocks. Out in open sea with no land in reach, a 5×5 plank
+platform is built on the water instead, and everyone starts on that.
 
 During a game, coordinates are forced on for everyone and it stays **midday**: the day/night cycle is stopped
 and the time is held at noon, so it never gets dark. Hostile mobs stay on unless the admin turns on
@@ -262,7 +272,7 @@ Admin settings for real maps:
 | Setting | What it does |
 |---|---|
 | Fill ruled-out areas in the sky | **Black wool top slabs** (default), off (outline only), black stained glass, or blackstone slabs. The fill sits at build height over the ruled-out part of the play area, and it's only placed near players. |
-| Map station | Each round, a cartography table and a chest appear next to the start point (put back if broken). The chest is refilled with one blank map and 3 paper per seeker, and seekers take their map from it instead of getting one handed to them. Zooming a map out 3 times at the table makes it cover about 1024×1024 blocks: the whole play area. Add-ons can't create zoomed maps themselves, so this is the quickest way to start zoomed out with a clean map every round. |
+| Map station | Each round, a cartography table and a chest appear next to the start point (put back if broken; on water, a small plank platform is built for them first). The chest is refilled with one blank map and 3 paper per seeker, and seekers take their map from it instead of getting one handed to them. Zooming a map out 3 times at the table makes it cover about 1024×1024 blocks: the whole play area. Add-ons can't create zoomed maps themselves, so this is the quickest way to start zoomed out with a clean map every round. |
 | Line up the play area with zoomed-out maps | Zoomed-out maps snap to a fixed grid. This moves the start point (up to ~500 blocks) to the center of the grid square the host is in, so one fully zoomed-out map shows the whole play area. Seekers are teleported there. |
 
 ## Installing
@@ -317,7 +327,8 @@ The scripts use the stable Script API (`@minecraft/server` 2.0.0 and `@minecraft
 
 ### Automated tests
 
-Serve the repo (`python -m http.server 8765 --bind 127.0.0.1`) and open
+Serve the repo with `python tests/serve.py` (it turns browser caching off, so you always test the current
+files) and open
 `http://127.0.0.1:8765/tests/run.html`. The page runs every suite and its title turns PASS or FAIL:
 
 | Suite | Covers |
