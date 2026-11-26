@@ -4,20 +4,20 @@
     "name": "Extreme Hide & Seek RP",
     "description": "Resources for Extreme Hide & Seek",
     "uuid": "72b20259-71a2-4c15-9f77-a5c1fe789676",
-    "version": [0, 31, 2],
+    "version": [0, 31, 3],
     "min_engine_version": [1, 21, 90]
   },
   "modules": [
     {
       "type": "resources",
       "uuid": "a4e30a0f-6fae-47c6-be89-6fde3aa68cce",
-      "version": [0, 31, 2]
+      "version": [0, 31, 3]
     }
   ],
   "dependencies": [
     {
       "uuid": "cc401950-893b-4dd0-80ef-9059ed29c628",
-      "version": [0, 31, 2]
+      "version": [0, 31, 3]
     }
   ]
 }

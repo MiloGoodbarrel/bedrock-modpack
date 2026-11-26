@@ -53,8 +53,14 @@ world.afterEvents.worldLoad.subscribe(() => {
 });
 
 world.afterEvents.playerSpawn.subscribe((event) => {
-  if (!event.initialSpawn) return;
   const player = event.player;
+  if (!event.initialSpawn) {
+    // Respawning after death: Bedrock puts you on the highest block, which can be the sky lines.
+    system.runTimeout(() => {
+      if (player.isValid) game.onRespawn(player);
+    }, 2);
+    return;
+  }
   system.runTimeout(() => {
     if (player.isValid) game.onPlayerSpawn(player);
   }, 20);
