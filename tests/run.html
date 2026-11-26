@@ -1,41 +1,44 @@
 <!doctype html>
 <meta charset="utf-8" />
 <title>Pure-JS tests</title>
+<!-- Lets the add-on's own modules load in a browser: "@minecraft/server" resolves to a small fake world. -->
+<script type="importmap">
+  {
+    "imports": {
+      "@minecraft/server": "./mocks/minecraft-server.js",
+      "@minecraft/server-ui": "./mocks/minecraft-server-ui.js"
+    }
+  }
+</script>
 <pre id="out">running...</pre>
 <script type="module">
-  // Runs the pure-JS test suites in a browser, for machines without Node.js:
+  // Runs the test suites in a browser, for machines without Node.js:
   //   python -m http.server 8765 --bind 127.0.0.1   (from the repo root)
   //   then open http://127.0.0.1:8765/tests/run.html
   const out = document.getElementById("out");
   const results = [];
-  try {
-    const g = await import("../behavior_packs/modpack_bp/scripts/geometry.js");
-    const { runGeometryTests } = await import("./geometry.test.js");
-    results.push(["geometry", runGeometryTests(g)]);
-  } catch (e) {
-    results.push(["geometry", { passed: false, fails: [String(e)] }]);
+  const S = "../behavior_packs/modpack_bp/scripts/";
+  async function suite(name, load) {
+    try {
+      results.push([name, await load()]);
+    } catch (e) {
+      results.push([name, { passed: false, fails: [String(e?.stack ?? e)] }]);
+    }
   }
-  try {
-    const h = await import("../behavior_packs/modpack_bp/scripts/hand.js");
-    const { runHandTests } = await import("./hand.test.js");
-    results.push(["hand", runHandTests(h)]);
-  } catch (e) {
-    results.push(["hand", { passed: false, fails: [String(e)] }]);
-  }
-  try {
-    const t = await import("../behavior_packs/modpack_bp/scripts/trackers.js");
-    const { runTrackerTests } = await import("./trackers.test.js");
-    results.push(["trackers", runTrackerTests(t)]);
-  } catch (e) {
-    results.push(["trackers", { passed: false, fails: [String(e)] }]);
-  }
-  try {
-    const m = await import("../behavior_packs/modpack_bp/scripts/settingsmodel.js");
-    const { runSettingsTests } = await import("./settings.test.js");
-    results.push(["settings", runSettingsTests(m)]);
-  } catch (e) {
-    results.push(["settings", { passed: false, fails: [String(e)] }]);
-  }
+  await suite("geometry", async () => (await import("./geometry.test.js")).runGeometryTests(await import(S + "geometry.js")));
+  await suite("hand", async () => (await import("./hand.test.js")).runHandTests(await import(S + "hand.js")));
+  await suite("trackers", async () => (await import("./trackers.test.js")).runTrackerTests(await import(S + "trackers.js")));
+  await suite("settings", async () => (await import("./settings.test.js")).runSettingsTests(await import(S + "settingsmodel.js")));
+  await suite("rules+questions+scoring+cards (mock world)", async () =>
+    (await import("./rules.test.js")).runRulesTests({
+      rules: await import(S + "rules.js"),
+      questions: await import(S + "questions.js"),
+      scoring: await import(S + "scoring.js"),
+      cards: await import(S + "cards.js"),
+      mc: await import("./mocks/minecraft-server.js"),
+    })
+  );
   window.testResults = results;
   out.textContent = results.map(([n, r]) => `${n}: ${r.passed ? "PASS" : "FAIL " + r.fails.join("; ")}`).join("\n");
+  document.title = results.every(([, r]) => r.passed) ? "PASS" : "FAIL";
 </script>

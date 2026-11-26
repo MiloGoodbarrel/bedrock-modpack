@@ -1,4 +1,4 @@
-// Game-mode settings chosen by the admin (world operator) in the lobby. Saved with the world and copied into
+// Game-mode settings chosen by the world's admins in the lobby. Saved with the world and copied into
 // the game state when a game starts, so changing them never affects a game in progress. The data model,
 // migration and presets live in settingsmodel.js (pure, tested).
 import { world } from "@minecraft/server";
@@ -37,16 +37,72 @@ export function saveSettings(settings) {
   }
 }
 
-/** World operators (the owner in single player / on a Realm) and anyone tagged hs_admin. */
+// --- Admins ------------------------------------------------------------------------
+//
+// The pinned Script API (@minecraft/server 2.0.0) has no way to tell whether a player is an operator, so the
+// add-on keeps its own admin list, saved with the world:
+// - while the world has no admin, the first person to press "Become admin" in the lobby becomes one (in
+//   practice the world's owner setting it up; the list survives uploading the world to a Realm)
+// - admins can add or remove other admins from Game settings
+// - anyone tagged hs_admin (/tag <name> add hs_admin) also counts
+// - on newer game versions that do report operator status, operators count too
+
+const ADMINS_KEY = "hs:admins";
+
+/** [{ id, name }] */
+export function adminList() {
+  try {
+    const raw = world.getDynamicProperty(ADMINS_KEY);
+    const list = typeof raw === "string" ? JSON.parse(raw) : [];
+    return Array.isArray(list) ? list.filter((a) => a && typeof a.id === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveAdmins(list) {
+  try {
+    world.setDynamicProperty(ADMINS_KEY, JSON.stringify(list));
+  } catch (e) {
+    console.warn(`[hs] could not save admins: ${e}`);
+  }
+}
+
+export function hasAnyAdmin() {
+  return adminList().length > 0;
+}
+
+/** First person to claim it becomes admin, if the world has none yet. True if they're admin now. */
+export function claimAdmin(player) {
+  if (hasAnyAdmin()) return isAdmin(player);
+  saveAdmins([{ id: player.id, name: player.name }]);
+  return true;
+}
+
+export function addAdmin(player) {
+  const list = adminList().filter((a) => a.id !== player.id);
+  list.push({ id: player.id, name: player.name });
+  saveAdmins(list);
+}
+
+/** Removes an admin (by id). The last admin can't be removed, so a world never locks everyone out. */
+export function removeAdmin(id) {
+  const list = adminList();
+  if (list.length <= 1) return false;
+  saveAdmins(list.filter((a) => a.id !== id));
+  return true;
+}
+
+/** Saved admins, anyone tagged hs_admin, and operators on game versions that report it. */
 export function isAdmin(player) {
   try {
     if (player.hasTag("hs_admin")) return true;
   } catch {}
+  if (adminList().some((a) => a.id === player.id)) return true;
+  // Newer Script API versions (not 2.0.0) expose this; the property simply doesn't exist on 2.0.0.
   try {
-    if ((player.playerPermissionLevel ?? -1) >= 2) return true; // PlayerPermissionLevel.Operator
-  } catch {}
-  try {
-    if ((player.commandPermissionLevel ?? 0) >= 1) return true; // CommandPermissionLevel.GameDirectors+
+    const level = player.playerPermissionLevel;
+    if (typeof level === "number" && level >= 2) return true; // PlayerPermissionLevel.Operator
   } catch {}
   return false;
 }

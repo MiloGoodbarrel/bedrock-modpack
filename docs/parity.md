@@ -122,3 +122,15 @@ not confirmed) · **Bedrock adaptation** (same idea, different mechanism because
 | Card picker | Already reworked in P0 (full-hand discard in one step); unchanged |
 | Corner minimap HUD | Not added: the HUD minimap was removed at the owner's request, and a corner HUD would need fragile client UI changes |
 | Scoreboard portraits | Not feasible: the sidebar scoreboard can't show player heads |
+
+## P4 status (spec batch 5: validation and release gates)
+
+| Item | Result |
+|---|---|
+| Stable API check | Every Minecraft API member the add-on uses was checked against the real `@minecraft/server` 2.0.0 and `@minecraft/server-ui` 2.0.0 type definitions (77 + all form calls). 4 were missing: `getBiome` (the biome question is now hidden on 2.0.0) and the operator/permission properties (see next row) |
+| Admin detection | **Fixed a real bug**: 2.0.0 can't tell who's an operator, so Game settings was effectively tag-only. Now there's a "Become admin" claim for worlds without an admin, an admin list managed in game, plus tags and newer-API operator checks |
+| Build output | **Fixed**: `Compress-Archive` stored paths with backslashes (invalid in zip files, risky on phones and consoles). The build now writes forward slashes and checks its own output |
+| Automated tests | 5 suites: geometry, hand, trackers, settings, and a mock-world suite running the real `rules.js`, `questions.js`, `scoring.js` and `cards.js` against a fake `@minecraft/server`. Every suite was also run against a deliberately broken copy to confirm it fails |
+| Module loading | All 22 scripts load together against the mocks (catches missing imports/exports and errors at load time), on top of the syntax check |
+| Manual test matrix | [test-matrix.md](test-matrix.md): permissions, full rotation, questions and cards, every challenge's real vs false completion, morphs, map/teleports/border, bots, dimensions, reloads, Windows/Realm/console/mobile, performance |
+| In-game validation | **Not done**: no in-game run has happened yet. Everything is still runtime unverified until the matrix is worked through |

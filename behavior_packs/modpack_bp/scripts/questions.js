@@ -7,7 +7,7 @@
 //   question goes through: the game makes the hider do something that gives them away.
 //
 // `planar` questions depend only on x/z, so bots and the map can use them to rule out areas.
-import { BlockPermutation, ItemStack } from "@minecraft/server";
+import { BlockPermutation, ItemStack, world } from "@minecraft/server";
 import { surfaceBlock } from "./surface.js";
 
 // Overworld-equivalent position: Nether coordinates count 8x so north/south and distances still make sense
@@ -24,6 +24,15 @@ function biomeId(player) {
     return player.dimension.getBiome(player.location)?.id;
   } catch {
     return undefined;
+  }
+}
+
+/** Whether this game version lets scripts read biomes (Dimension.getBiome isn't in Script API 2.0.0). */
+function biomeSupported() {
+  try {
+    return typeof world.getDimension("minecraft:overworld").getBiome === "function";
+  } catch {
+    return false;
   }
 }
 
@@ -177,6 +186,8 @@ export const CATEGORIES = [
       },
       {
         id: "same_biome",
+        // Script API 2.0.0 has no biome lookup, so this only shows up on game versions where it works.
+        available: biomeSupported,
         text: "Is your biome the same as mine?",
         answer: (asker, hider) => {
           const a = biomeId(asker);
@@ -366,4 +377,9 @@ export function findQuestion(id) {
     if (q) return { category: cat, question: q };
   }
   return undefined;
+}
+
+/** Questions that can actually be asked on this game version (hides ones the API can't answer). */
+export function availableQuestions(category) {
+  return category.questions.filter((q) => q.available?.() !== false);
 }
