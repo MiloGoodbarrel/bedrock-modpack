@@ -28,6 +28,7 @@
   await suite("geometry", async () => (await import("./geometry.test.js")).runGeometryTests(await import(S + "geometry.js")));
   await suite("hand", async () => (await import("./hand.test.js")).runHandTests(await import(S + "hand.js")));
   await suite("trackers", async () => (await import("./trackers.test.js")).runTrackerTests(await import(S + "trackers.js")));
+  await suite("exposure", async () => (await import("./exposure.test.js")).runExposureTests(await import(S + "exposure.js")));
   await suite("settings", async () => (await import("./settings.test.js")).runSettingsTests(await import(S + "settingsmodel.js")));
   await suite("rules+questions+scoring+cards (mock world)", async () =>
     (await import("./rules.test.js")).runRulesTests({

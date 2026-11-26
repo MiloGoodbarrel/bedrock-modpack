@@ -21,6 +21,12 @@ export const CONFIG = {
   seaLevel: 63,
   // Hider rule: "Near Sky Light" checks columns within this many blocks for open sky.
   skyLightRadius: 2,
+  // Hider rule: "Open to Outside" (admin toggle) must reach open sky through see-through blocks within this
+  // many blocks of the hider. Stops sealed bunkers, trapdoor pits and tunnels.
+  openToOutsideSteps: 6,
+  // ...or the hider must be in a natural open space (a cave, a ravine) at least this many blocks big. Blocks the
+  // hider dug out or blew up don't count, so hand-dug pits, tunnels and bunkers still fail.
+  naturalSpaceBlocks: 30,
   // Half the width of the square play area, centered on where the game starts (500 = 1000x1000).
   playAreaRadius: 500,
   // A seeker "finds" the hider by looking straight at them, unobstructed, within this range.

@@ -11,7 +11,7 @@ ConnorIGL on YouTube. This is an independent rebuild for Bedrock. No code or ass
 Works on Windows, Xbox, PlayStation, Switch, mobile and Realms. **No experimental toggles needed.**
 Requires Minecraft Bedrock **1.21.90 or newer**.
 
-> **Status:** early development (v0.29.0). Every feature below is written, but none of it has been playtested
+> **Status:** early development (v0.30.0). Every feature below is written, but none of it has been playtested
 > in game yet, so expect bugs. Please report anything that shows up in the Content Log (Settings → Creator).
 
 ## How to play
@@ -52,6 +52,7 @@ operator, so the add-on keeps its own admin list:
 | Allow hiding in water | Removes the water part of the Dry rule (lava is never allowed) |
 | Peaceful | Off by default (hostile mobs on). On: no hostile mobs or hunger, and challenges that need mob drops (TNT, fishing) are never dealt |
 | Rotations | 1–5 (default 3). After everyone has hidden, everyone is moved to a new random location with a new border and it goes around again |
+| Spot must be open to the outside | On by default: the Open Spot rule (no dug-out bunkers, trapdoor pits or tunnels; natural caves are fine) |
 | How seekers find a hider | Look at them or hit them (default) · keep them in view for a second, or hit them · hit them only. Disguised hiders always have to be hit |
 | Fill ruled-out areas in the sky | Black wool top slabs (default) · off · black stained glass · blackstone slabs (see Real maps below) |
 | Map station | Chest + cartography table at the start, refilled with blank maps and paper each round |
@@ -121,6 +122,7 @@ background, so they never load far-off chunks.
 | Dry | Not in water, lava, bubble columns, powder snow, or waterlogged blocks (with water allowed: "Not in Lava") |
 | Above Sea Level | At Y 63 or higher |
 | Near Sky Light | Open sky within 2 blocks of the hider (any block overhead counts as cover, including glass and leaves; the add-on's own sky layer is ignored) |
+| Open Spot | The spot must connect to the outside through see-through space (air, leaves, glass, fences, plants, open doors and trapdoors) within 6 blocks, at ground level; **or** be part of a natural open space of 30+ blocks (a cave or ravine). Blocks the hider dug out or blew up never count as natural, so a hand-dug pit, tunnel, shaft or bunker fails, while a leaf pocket, a spot under a mushroom, or a natural cave wall passes. Admin toggle, on by default |
 | In the Overworld | Games are Overworld-only |
 | Inside Play Area | Within the 1000×1000 square around the start point |
 | Room for the Block | Block morph only: nothing solid where the disguise block goes |
