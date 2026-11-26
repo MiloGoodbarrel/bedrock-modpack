@@ -2,6 +2,7 @@ import * as mc from "@minecraft/server";
 import { world, system, GameMode, ItemStack, ItemLockMode, DisplaySlotId } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 import { surfaceBlock } from "./surface.js";
+import { constraintsFrom, areaFraction } from "./geometry.js";
 import { checkSpotRules, formatRules, flatPos, insidePlayArea } from "./rules.js";
 import { findQuestion } from "./questions.js";
 import { getSettings, describeSettings, morphLabel } from "./settings.js";
@@ -1385,9 +1386,55 @@ export function onBlockHit(player, location, dimension) {
 const MAP_DEPS = { hiderId: () => hiderId(), isSeeker: (p) => isSeeker(p), seekerBots: () => bots.seekerPositions() };
 
 /** The minimap for this player as lines of text (empty outside a round). */
-export function mapLines(player, size) {
+export function mapLines(player, size, rowLabels = false) {
   if (state.phase !== "hiding" && state.phase !== "seeking") return [];
-  return map.renderMap(state, player, size, MAP_DEPS);
+  return map.renderMap(state, player, size, MAP_DEPS, rowLabels);
+}
+
+let areaCache = { key: "", values: [] };
+
+/** "x% of the area left" after each clue, in order (for the clue log). Cached until a new clue arrives. */
+export function clueAreaLeft() {
+  if (!state.center) return [];
+  const key = `${roundKey()}:${state.clues.length}`;
+  if (areaCache.key === key) return areaCache.values;
+  const out = [];
+  const so = [];
+  for (const c of state.clues) {
+    so.push(c);
+    out.push(areaFraction(constraintsFrom(so), state.center.x, state.center.z, CONFIG.playAreaRadius, 60));
+  }
+  areaCache = { key, values: out };
+  return out;
+}
+
+/**
+ * Seeker teleports to a square of the menu map (row 0 = A at the top, col 0 = leftmost): to the square's
+ * middle if that's allowed, otherwise the allowed spot in the square closest to the middle.
+ */
+export function teleportToCell(player, row, col) {
+  const blocked = canTeleport(player);
+  if (blocked) return tell(player, `§c${blocked}`);
+  const size = CONFIG.menuMapSize;
+  if (!state.center || !(row >= 0 && row < size && col >= 0 && col < size)) return tell(player, "§cThat's not a map square.");
+  const b = map.cellBounds(state, size, row, col);
+  const mx = (b.x0 + b.x1) / 2;
+  const mz = (b.z0 + b.z1) / 2;
+  const spots = [];
+  const n = 8;
+  for (let i = 0; i <= n; i++) {
+    for (let j = 0; j <= n; j++) {
+      const x = Math.floor(b.x0 + ((b.x1 - b.x0 - 1) * i) / n) + 0.5;
+      const z = Math.floor(b.z0 + ((b.z1 - b.z0 - 1) * j) / n) + 0.5;
+      spots.push({ x, z, d: Math.hypot(x - mx, z - mz) });
+    }
+  }
+  spots.unshift({ x: Math.floor(mx) + 0.5, z: Math.floor(mz) + 0.5, d: 0 });
+  spots.sort((a, c) => a.d - c.d);
+  const spot = spots.find((p) => !destinationProblem(p.x, p.z));
+  const name = `${map.ROW_LETTERS[row]}${col + 1}`;
+  if (!spot) return tell(player, `§cSquare ${name} is completely ruled out (or outside the play area).`);
+  startTeleport(player, spot.x, spot.z, `map square ${name}`);
 }
 
 function actionBar(player, text) {

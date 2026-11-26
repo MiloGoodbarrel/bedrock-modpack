@@ -123,6 +123,20 @@ export function runGeometryTests(g) {
     check("negative coords: west half in, east half out", grid[0][0] === "in" && grid[0][9] === "out");
   }
 
+  // 7. Area fraction (clue log): halves and circles come out about right.
+  {
+    check("no clues -> 100%", g.areaFraction([], 0, 0, 500) === 1);
+    const north = g.constraintsFrom([{ qid: "north_south", from: { x: 0, z: 0 }, answer: "North" }]);
+    check("north of the center -> about 50%", Math.abs(g.areaFraction(north, 0, 0, 500) - 0.5) < 0.02);
+    const circle = g.constraintsFrom([{ qid: "within_250", from: { x: 0, z: 0 }, answer: "Yes" }]);
+    const expected = (Math.PI * 250 * 250) / (1000 * 1000); // ~19.6%
+    check("250-block circle in the middle -> about 19.6%", Math.abs(g.areaFraction(circle, 0, 0, 500) - expected) < 0.02);
+    const none = g.constraintsFrom([
+      { qid: "north_south", from: { x: 0, z: -600 }, answer: "North" }, // north of the whole area: impossible
+    ]);
+    check("impossible -> 0%", g.areaFraction(none, 0, 0, 500) === 0);
+  }
+
   return { passed: fails.length === 0, fails: [...new Set(fails)].slice(0, 10) };
 }
 

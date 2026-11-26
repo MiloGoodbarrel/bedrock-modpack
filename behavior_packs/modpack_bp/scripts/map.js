@@ -70,8 +70,14 @@ function cellColor(state, size, row, col, v) {
   return v === "in" ? base : OVER_TERRAIN[v];
 }
 
-/** The map as lines of text. */
-export function renderMap(state, viewer, size, deps) {
+export const ROW_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+/**
+ * The map as lines of text. With rowLabels, each row ends with its letter (A at the top), so a square can
+ * be named "C7" (row C, 7th from the left) for teleporting. Labels go at the end of the line so they can't
+ * push the squares out of line.
+ */
+export function renderMap(state, viewer, size, deps, rowLabels = false) {
   if (!state.center) return [];
   const g = grid(state, size);
   const marks = new Map();
@@ -80,9 +86,21 @@ export function renderMap(state, viewer, size, deps) {
     const { row, col } = cellOf(state, size, m.entity);
     marks.set(`${row},${col}`, m.color);
   }
-  return g.map((line, row) =>
-    line.map((v, col) => `${marks.get(`${row},${col}`) ?? cellColor(state, size, row, col, v)}${CELL}`).join("") + "§r"
+  return g.map(
+    (line, row) =>
+      line.map((v, col) => `${marks.get(`${row},${col}`) ?? cellColor(state, size, row, col, v)}${CELL}`).join("") +
+      (rowLabels ? ` §7${ROW_LETTERS[row]}` : "") +
+      "§r"
   );
+}
+
+/** Block-coordinate bounds of a map square: { x0, x1, z0, z1 } (x1/z1 exclusive). */
+export function cellBounds(state, size, row, col) {
+  const r = CONFIG.playAreaRadius;
+  const cell = (2 * r) / size;
+  const x0 = state.center.x - r + col * cell;
+  const z0 = state.center.z - r + row * cell;
+  return { x0, x1: x0 + cell, z0, z1: z0 + cell };
 }
 
 /** Legend text for the menu map, matching whether terrain has been scanned yet. */

@@ -109,3 +109,16 @@ not confirmed) · **Bedrock adaptation** (same idea, different mechanism because
 | Block states | Not preserved for the disguise itself: held items don't carry block states, so blocks use their default orientation (documented) |
 | Gravity / moved blocks | Done: if the disguise block disappears or changes without a seeker breaking it (falls, explodes, pushed), the hider counts as found |
 | Spectator scouting | Movement locked and 0.4-block snap-back, so the camera can't leave the block |
+
+## P3 status (spec batch 4)
+
+| Item | Result |
+|---|---|
+| Presets | Done: Classic, Mob Morph, Block Morph, Mixed Morph, Extended, Solo Practice (`settingsmodel.js`, tested) |
+| Settings migration | Done: versioned settings; anything unknown, invalid or removed is repaired on load (tested, including a v1-era save) |
+| Clickable-map approximation | Done: teleport to a map square (row letter + column number), landing in the square's middle or the nearest allowed spot. Row letters shown on the menu map |
+| Clue log | Done: shows the share of the play area still possible after each answer |
+| Reference rules vs extensions | Done in README; this file has the per-feature breakdown |
+| Card picker | Already reworked in P0 (full-hand discard in one step); unchanged |
+| Corner minimap HUD | Not added: the HUD minimap was removed at the owner's request, and a corner HUD would need fragile client UI changes |
+| Scoreboard portraits | Not feasible: the sidebar scoreboard can't show player heads |

@@ -122,6 +122,22 @@ export function classifyGrid(constraints, cx, cz, r, size, depth = 5) {
   return rows;
 }
 
+/**
+ * Roughly what fraction (0..1) of the square play area still fits every constraint, by checking an n×n grid
+ * of points. Used for the "X% of the area left" note in the clue log; never used to rule anything out.
+ */
+export function areaFraction(constraints, cx, cz, r, n = 80) {
+  if (!constraints.length) return 1;
+  let ok = 0;
+  const step = (2 * r) / n;
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      if (allOk(constraints, cx - r + (i + 0.5) * step, cz - r + (j + 0.5) * step)) ok++;
+    }
+  }
+  return ok / (n * n);
+}
+
 /** The smallest "within R: yes" circle, if any (bots sample inside it). */
 export function smallestYesCircle(constraints) {
   let best;
