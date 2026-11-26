@@ -11,7 +11,7 @@ ConnorIGL on YouTube. This is an independent rebuild for Bedrock. No code or ass
 Works on Windows, Xbox, PlayStation, Switch, mobile and Realms. **No experimental toggles needed.**
 Requires Minecraft Bedrock **1.21.90 or newer**.
 
-> **Status:** early development (v0.30.1). Every feature below is written, but none of it has been playtested
+> **Status:** early development (v0.30.2). Every feature below is written, but none of it has been playtested
 > in game yet, so expect bugs. Please report anything that shows up in the Content Log (Settings → Creator).
 
 ## How to play
