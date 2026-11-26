@@ -156,6 +156,7 @@ function shapeFns(state) {
     inside: (x, z) => insidePlayArea({ x, z }, state.center) && possible(x, z),
     ruledOut: (x, z) => insidePlayArea({ x, z }, state.center) && !possible(x, z),
     fill: f ? permutation(f.type, f.states, f.fallback) : undefined,
+    fillBlocksLight: !!f && !/glass/.test(f.type),
   };
 }
 
@@ -190,7 +191,11 @@ function drawChunk(dim, cx, cz, shape, version) {
       const mz = z + 0.5;
       const edge =
         !!inside && inside(mx, mz) && (!inside(mx + w, mz) || !inside(mx - w, mz) || !inside(mx, mz + w) || !inside(mx, mz - w));
-      const want = edge ? linePerm() : shape?.fill && shape.ruledOut(mx, mz) ? shape.fill : undefined;
+      // The fill leaves a gap at every odd x and odd z (1 block in 4), so daylight still reaches the ground and
+      // the ruled-out area doesn't get dark enough for monsters. Maps still show it dark: 3 of every 4 blocks
+      // are filled, and zoomed-out maps sample even coordinates. See-through fills (glass) don't need gaps.
+      const gap = (x & 1) === 1 && (z & 1) === 1 && shape?.fillBlocksLight;
+      const want = edge ? linePerm() : shape?.fill && !gap && shape.ruledOut(mx, mz) ? shape.fill : undefined;
       try {
         if (want) {
           if (block.typeId !== want.type.id && (block.isAir || OURS.has(block.typeId))) block.setPermutation(want);

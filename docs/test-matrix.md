@@ -114,6 +114,9 @@ For each: confirm it completes when a seeker really does it, and does NOT comple
 - [ ] Locator bar: the hider sees seekers; seekers don't see the hider. (Mob head trick: needs confirming.)
 - [ ] Compasses are taken from seekers during a round.
 
+- [ ] Sky fill: the ground under the black fill stays daylight-bright (no monsters spawning there); zoomed-out maps still show the ruled-out area black.
+- [ ] Die as a seeker mid-game (e.g. /kill): you respawn on the ground at the start point, not on the sky slabs. Outside a game, respawning under the sky lines puts you on the ground.
+
 ## 7. Solo bots
 
 - [ ] One player + Start → 2 bots join; bots hide (bush or disguise), ask questions on their turns, search,

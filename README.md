@@ -11,7 +11,7 @@ ConnorIGL on YouTube. This is an independent rebuild for Bedrock. No code or ass
 Works on Windows, Xbox, PlayStation, Switch, mobile and Realms. **No experimental toggles needed.**
 Requires Minecraft Bedrock **1.21.90 or newer**.
 
-> **Status:** early development (v0.31.2). Every feature below is written, but none of it has been playtested
+> **Status:** early development (v0.31.3). Every feature below is written, but none of it has been playtested
 > in game yet, so expect bugs. Please report anything that shows up in the Content Log (Settings → Creator).
 
 ## How to play
@@ -262,8 +262,15 @@ The ordinary map item works too. Add-ons can't draw on maps, but a map shows the
 So during a round, the add-on places a band of **red wool top slabs at build height (Y 319)** along the edge of
 where the hider can still be. Before any answers, that edge is the play area's square border. After each answer
 it's the new, smaller shape. By default the ruled-out part of the play area is also covered in **black wool
-top slabs**, so it shows black on maps, like the Java mod's blackout. Top slabs let light through, so the
-ground below stays bright. On a game version without wool slabs, full wool blocks are used instead.
+top slabs**, so it shows black on maps, like the Java mod's blackout. Only top slabs are used (lines and fill).
+Slabs block daylight, so the fill leaves a one-block gap at every odd X and odd Z (1 block in 4): daylight
+reaches the ground through the gaps and the area under the fill stays bright enough that monsters don't spawn,
+while maps still show it black. Glass fill doesn't need gaps. On a game version without wool slabs, full wool
+blocks are used instead.
+
+**Respawning:** Bedrock respawns players on the highest block, which could be the sky lines. During a game, a
+player who dies comes back on the ground at the start point (the hider at their spot). Outside a game, anyone
+who respawns up at build height is moved down to the ground below.
 
 - **Every hider's round starts with a clean map.** At the start of each turn, everyone's maps are taken away
   and replaced with one fresh empty map, so old lines and markers are gone. Use it to start mapping, then

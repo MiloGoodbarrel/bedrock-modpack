@@ -946,6 +946,23 @@ export function canTeleport(player) {
  * landing is re-checked first: if the round has changed since, the player isn't moved again (only the
  * temporary effects are cleaned up).
  */
+/**
+ * After a death. In a game, players come back on the ground: seekers (and anyone waiting) at the start point,
+ * the hider at their spot. Outside a game, anyone who respawned up on leftover sky lines is moved down to the
+ * ground below them.
+ */
+export function onRespawn(player) {
+  try {
+    const inGame = isJoined(player) && ["hiding", "seeking", "between"].includes(state.phase) && state.center;
+    if (inGame) {
+      const at = state.phase === "seeking" && player.id === hiderId() && state.spot ? state.spot : state.center;
+      return surfaceTeleport(player, at.x, at.z);
+    }
+    const l = player.location;
+    if (l.y >= (player.dimension.heightRange?.max ?? 320) - 4) surfaceTeleport(player, l.x, l.z);
+  } catch {}
+}
+
 function surfaceTeleport(player, x, z) {
   const d = world.getDimension(state.dimId);
   const round = roundKey();
