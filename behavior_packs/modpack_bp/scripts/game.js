@@ -107,6 +107,7 @@ function freshState(players = []) {
     pending: null, // a question waiting out the hider's Cancel window
     challenge: null, // { id, left, baseline, botLeft } while seekers must complete a challenge
     usedChallenges: [], // challenge ids played this round (each once per round)
+    dug: [], // "x,y,z" of blocks the hider dug out (or blew up) this round
     stationTurn: "", // roundKey() the map station was last set up for
     cycle: 0, // which rotation this is (0-based); each rotation happens at a new random location
     relocating: false, // between rotations: looking for the next location
@@ -620,6 +621,7 @@ function startTurn(turn) {
   state.pending = null;
   state.challenge = null;
   state.usedChallenges = [];
+  state.dug = []; // blocks the hider digs out this round (Open Spot rule)
   state.tp = {};
   // Seekers take turns asking, in join order, starting with a different seeker each round.
   const seekers = state.players.map((p) => p.id).filter((pid) => pid !== state.order[turn]);
@@ -671,7 +673,7 @@ export function roundKey() {
 /** Hider locks in their spot. Returns the failed rules (empty on success). */
 export function lockIn(player) {
   if (state.phase !== "hiding" || player.id !== hiderId()) return [];
-  const failed = checkSpotRules(player, state.center, state.rules ?? {}, state.disguise).filter((r) => !r.ok);
+  const failed = checkSpotRules(player, state.center, spotRuleOptions(), state.disguise).filter((r) => !r.ok);
   if (failed.length) return failed;
 
   const loc = player.location;
@@ -1277,6 +1279,44 @@ export function onPlaceBlock(player, block) {
   } catch {}
 }
 
+// --- What the hider dug out this round ------------------------------------------------
+// The "Open Spot" rule only lets natural open space (caves, ravines) stand in for being open to the outside.
+// Space the hider dug themselves (or blew up: they have Creative TNT) doesn't count, so a hand-dug pit, tunnel
+// or bunker fails while a natural cave passes.
+
+const DUG_LIMIT = 6000;
+let dugCache = { n: -1, set: new Set() };
+
+function noteDug(x, y, z) {
+  state.dug ??= [];
+  if (state.dug.length >= DUG_LIMIT) return;
+  state.dug.push(`${Math.floor(x)},${Math.floor(y)},${Math.floor(z)}`);
+}
+
+/** Blocks dug out (or blown up) during this round, as a Set of "x,y,z". */
+export function dugSet() {
+  const list = state.dug ?? [];
+  if (dugCache.n !== list.length) dugCache = { n: list.length, set: new Set(list) };
+  return dugCache.set;
+}
+
+/** The game's settings plus this round's dug-out blocks, for the spot rules. */
+export function spotRuleOptions() {
+  return { ...(state.rules ?? {}), dug: dugSet() };
+}
+
+export function onBreakBlock(player, location) {
+  if (hiderRoundActive(player)) noteDug(location.x, location.y, location.z);
+}
+
+/** Any explosion during a round: the blocks it destroys count as dug (read-only, so safe in a before event). */
+export function beforeExplosion(event) {
+  if (state.phase !== "hiding" && state.phase !== "seeking") return;
+  try {
+    for (const b of event.getImpactedBlocks()) noteDug(b.location.x, b.location.y, b.location.z);
+  } catch {}
+}
+
 /** Takes unbreakable blocks out of the hider's inventory (they keep reappearing from the Creative menu). */
 function stripUnbreakables() {
   const id = hiderId();
@@ -1608,7 +1648,7 @@ function tickHiding() {
   if (state.hidingLeft % 10 === 0) save();
 
   const timer = state.hidingLeft > 0 ? `§eBuild time: ${fmt(state.hidingLeft)}` : `§cOVERTIME +${state.overtime}s`;
-  const rules = checkSpotRules(hider, state.center, state.rules ?? {}, state.disguise);
+  const rules = checkSpotRules(hider, state.center, spotRuleOptions(), state.disguise);
   actionBar(hider, `${timer}\n${formatRules(rules, "  ")}`);
   const seekerText =
     state.hidingLeft > 0 ? `§e${hider.name} is hiding... ${fmt(state.hidingLeft)}` : `§c${hider.name} is in overtime!`;

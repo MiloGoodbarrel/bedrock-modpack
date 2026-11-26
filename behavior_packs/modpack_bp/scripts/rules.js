@@ -1,5 +1,6 @@
 import { CONFIG } from "./config.js";
 import { surfaceBlock } from "./surface.js";
+import { isSeeThrough, openToOutside } from "./exposure.js";
 import { neighbourTypes, roomForBlock } from "./disguise.js";
 
 const OVERWORLD = "minecraft:overworld";
@@ -59,6 +60,67 @@ function nearSkyLight(player) {
   return false;
 }
 
+/**
+ * "Open Spot": the spot must connect to the outside through see-through space within a few blocks, or be part
+ * of a big enough natural open space (a cave or ravine). opts.dug = blocks the hider dug out this round ("x,y,z"),
+ * which never count as natural, so a hand-dug pit, tunnel or bunker fails.
+ * (exposure.js). Unloaded blocks count as closed, so an unknown spot never passes.
+ */
+function openToOutsideAt(player, dug) {
+  const { dimension: d, location: l } = player;
+  const fx = Math.floor(l.x);
+  const fy = Math.floor(l.y);
+  const fz = Math.floor(l.z);
+  const tops = new Map();
+  const topAt = (x, z) => {
+    const key = `${x},${z}`;
+    if (!tops.has(key)) {
+      let top = null; // null = unknown (unloaded)
+      try {
+        const t = surfaceBlock(d, { x, z });
+        top = t ? t.location.y : -Infinity;
+      } catch {}
+      tops.set(key, top);
+    }
+    return tops.get(key);
+  };
+  // Ground height around a column: the lowest surface 2 blocks out in each direction (so standing next to a
+  // wall or a mushroom cap doesn't count as being "below ground").
+  const groundAround = (x, z) => {
+    const near = [topAt(x + 2, z), topAt(x - 2, z), topAt(x, z + 2), topAt(x, z - 2)].filter((t) => t !== null);
+    return near.length ? Math.min(...near) : topAt(x, z);
+  };
+  const cell = (x, y, z) => {
+    let b;
+    try {
+      b = d.getBlock({ x, y, z });
+    } catch {
+      return undefined;
+    }
+    if (!b) return undefined;
+    let states = {};
+    try {
+      states = b.permutation.getAllStates();
+    } catch {}
+    const pass = b.isAir || isSeeThrough(b.typeId, states);
+    const natural = !dug?.has(`${x},${y},${z}`); // the hider didn't dig this out
+    const top = topAt(x, z);
+    if (!pass || top === null || !(top < y)) return { pass, sky: false, natural };
+    // Open sky above, but only "outside" if it isn't down a shaft: at most a block below the ground around it.
+    const ground = groundAround(x, z);
+    return { pass, sky: ground === null || y >= ground, natural };
+  };
+  return openToOutside(
+    [
+      { x: fx, y: fy, z: fz },
+      { x: fx, y: fy + 1, z: fz },
+    ],
+    cell,
+    CONFIG.openToOutsideSteps,
+    CONFIG.naturalSpaceBlocks
+  );
+}
+
 /** True if x/z is inside the square play area around center (always true without a center). */
 export function insidePlayArea(location, center) {
   if (!center) return true;
@@ -95,6 +157,7 @@ export function checkSpotRules(player, center, opts = {}, disguise = undefined) 
   else rules.push({ label: "Not in Lava", ok: !lava });
   if (dimId === OVERWORLD) rules.push({ label: "Above Sea Level", ok: y >= CONFIG.seaLevel });
   if (dimId !== NETHER) rules.push({ label: "Near Sky Light", ok: nearSkyLight(player) }); // the Nether has no sky
+  if (opts.openSpot !== false) rules.push({ label: "Open Spot", ok: openToOutsideAt(player, opts.dug) });
   if (opts.maxY) rules.push({ label: `Below Y ${opts.maxY}`, ok: y <= opts.maxY });
   if (dimId !== OVERWORLD) rules.push({ label: "In the Overworld", ok: dimensionAllowed(dimId) });
   if (dimId !== END) rules.push({ label: "Inside Play Area", ok: insidePlayArea(flatPos(player), center) });

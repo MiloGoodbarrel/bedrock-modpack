@@ -52,7 +52,7 @@ export function runRulesTests({ rules, questions, scoring, cards, mc }) {
     // Roof over a 5x5 area (sky-light radius 2) at y=70: no open sky nearby.
     const roof = {};
     for (let x = -2; x <= 2; x++) for (let z = -2; z <= 2; z++) roof[`${x},70,${z}`] = "minecraft:glass";
-    check("fully roofed (even glass) fails Near Sky Light", ruleMap(mc.makePlayer({ dimension: floor(roof) }))["Near Sky Light"] === false);
+    check("fully roofed (glass) fails Near Sky Light", ruleMap(mc.makePlayer({ dimension: floor(roof) }))["Near Sky Light"] === false);
     delete roof["2,70,2"];
     check("one open column within 2 passes", ruleMap(mc.makePlayer({ dimension: floor(roof) }))["Near Sky Light"] === true);
   }
@@ -83,6 +83,82 @@ export function runRulesTests({ rules, questions, scoring, cards, mc }) {
     const slab = mc.makePlayer({ dimension: floor({ "0,64,0": "minecraft:oak_slab" }) });
     check("a slab at feet has no room", ruleMap(slab, { morph: true }, { kind: "block", type: "minecraft:oak_planks" })["Room for the Block"] === false);
     check("morph on without a pick fails", ruleMap(p, { morph: true }, undefined)["Pick a Disguise"] === false);
+  }
+
+  // --- Open Spot (no dug-out bunkers, trapdoor pits or tunnels; natural caves are fine) ---
+  {
+    // Solid dirt ground from y=55 to y=63 over a 21x21 area, stone below, open sky. Helpers carve air into it.
+    const ground = () => {
+      const b = {};
+      for (let x = -10; x <= 10; x++) for (let z = -10; z <= 10; z++) {
+        for (let y = 40; y <= 54; y++) b[`${x},${y},${z}`] = "minecraft:stone";
+        for (let y = 55; y <= 63; y++) b[`${x},${y},${z}`] = "minecraft:dirt";
+      }
+      return b;
+    };
+    const carve = (b, cells) => {
+      for (const c of cells) b[c] = "minecraft:air";
+      return b;
+    };
+    // dug: the carved cells the hider dug out themselves (they never count as natural space).
+    const spot = (blocks, { y, x = 0.5, dug = [] }) =>
+      ruleMap(mc.makePlayer({ dimension: mc.makeDimension({ blocks }), x, y }), { dug: new Set(dug) })["Open Spot"];
+
+    const pitCells = ["0,61,0", "0,62,0", "0,63,0"];
+    const pit = () => carve(ground(), pitCells);
+    check("shallow open dug pit (3 deep) passes: one step to the surface", spot(pit(), { y: 61, dug: pitCells }) === true);
+    const closed = { ...pit(), "0,63,0": { typeId: "minecraft:oak_trapdoor", states: { open_bit: false } } };
+    check("dug pit with a closed trapdoor lid fails", spot(closed, { y: 61, dug: pitCells }) === false);
+    const opened = { ...pit(), "0,63,0": { typeId: "minecraft:oak_trapdoor", states: { open_bit: true } } };
+    check("dug pit with an open trapdoor passes", spot(opened, { y: 61, dug: pitCells }) === true);
+    check("dug pit covered with dirt fails", spot({ ...pit(), "0,63,0": "minecraft:dirt" }, { y: 61, dug: pitCells }) === false);
+
+    // The tunnel loophole: dig down, then 3 blocks sideways, then seal the entrance.
+    const tunnelCells = ["0,63,0", "0,62,0", "0,61,0", "1,61,0", "2,61,0", "3,61,0", "1,62,0", "2,62,0", "3,62,0"];
+    const sealed = { ...carve(ground(), tunnelCells), "0,63,0": "minecraft:dirt" };
+    check("sealed dug tunnel fails", spot(sealed, { y: 61, x: 3.5, dug: tunnelCells }) === false);
+    check("tiny sealed natural pocket fails too", spot(sealed, { y: 61, x: 3.5, dug: [] }) === false);
+
+    // A deep open 1x1 shaft fails even with nothing on top: its floor is far below the ground around it.
+    const shaftCells = [];
+    for (let y = 48; y <= 63; y++) shaftCells.push(`0,${y},0`);
+    check("deep dug shaft (16 down, no lid) fails", spot(carve(ground(), shaftCells), { y: 48, dug: shaftCells }) === false);
+
+    // A natural cave: a sealed 7x3x7 hollow deep underground, no sky anywhere. Hard to find, but fair.
+    const caveCells = [];
+    for (let x = -3; x <= 3; x++) for (let y = 45; y <= 47; y++) for (let z = -3; z <= 3; z++) caveCells.push(`${x},${y},${z}`);
+    const cave = carve(ground(), caveCells);
+    check("natural cave passes", spot(cave, { y: 45 }) === true);
+    check("hiding against a natural cave wall passes", spot(cave, { y: 45, x: 3.5 }) === true);
+    check("the same hollow dug out by the hider fails", spot(cave, { y: 45, dug: caveCells }) === false);
+    // A pit inside the cave (dug 2 deeper in the cave floor) still opens into the natural cave.
+    const pitInCave = carve({ ...cave }, ["0,44,0", "0,43,0"]);
+    check("dug pit in a natural cave floor passes", spot(pitInCave, { y: 43, dug: ["0,44,0", "0,43,0"] }) === true);
+
+    // Leaf pocket: surrounded by leaves on every side and above, but leaves are see-through.
+    const leafy = {};
+    for (let x = -10; x <= 10; x++) for (let z = -10; z <= 10; z++) leafy[`${x},70,${z}`] = "minecraft:oak_log";
+    for (let x = -2; x <= 2; x++) for (let y = 71; y <= 74; y++) for (let z = -2; z <= 2; z++) leafy[`${x},${y},${z}`] = "minecraft:oak_leaves";
+    carve(leafy, ["0,71,0", "0,72,0"]);
+    check("pocket cut into leaves passes", spot(leafy, { y: 71, dug: ["0,71,0", "0,72,0"] }) === true);
+
+    // Under a mushroom cap: a 5x5 cap overhead, open at the sides.
+    const shroom = {};
+    for (let x = -10; x <= 10; x++) for (let z = -10; z <= 10; z++) shroom[`${x},63,${z}`] = "minecraft:grass_block";
+    for (let x = -2; x <= 2; x++) for (let z = -2; z <= 2; z++) shroom[`${x},68,${z}`] = "minecraft:red_mushroom_block";
+    check("under a mushroom cap passes", spot(shroom, { y: 64 }) === true);
+
+    // A sealed dirt box on the surface fails, even with a glass window; a real doorway opens it up.
+    const box = {};
+    for (let x = -10; x <= 10; x++) for (let z = -10; z <= 10; z++) box[`${x},63,${z}`] = "minecraft:stone";
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (let y = 64; y <= 66; y++) box[`${dx},${y},${dz}`] = "minecraft:dirt";
+    box["0,66,0"] = "minecraft:dirt";
+    check("sealed dirt box fails", spot(box, { y: 64 }) === false);
+    check("same box with a glass window still fails", spot({ ...box, "1,65,0": "minecraft:glass" }, { y: 64 }) === false);
+    check("same box with an open doorway passes", spot({ ...box, "1,65,0": "minecraft:air", "1,64,0": "minecraft:air" }, { y: 64 }) === true);
+
+    // The admin can switch the rule off.
+    check("rule absent when switched off", ruleMap(mc.makePlayer({ dimension: mc.makeDimension({ blocks: sealed }), x: 3.5, y: 61 }), { openSpot: false })["Open Spot"] === undefined);
   }
 
   // --- Observation answers ---

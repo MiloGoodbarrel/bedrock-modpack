@@ -44,6 +44,7 @@ export const DEFAULTS = {
   fillMode: "wool_slab",
   zoomKit: false, // "Map station"
   alignToMap: false,
+  openSpot: true, // "Open to Outside" spot rule: no sealed bunkers, trapdoor pits or tunnels
 };
 
 const ids = (list) => list.map(([id]) => id);
@@ -69,6 +70,7 @@ export function migrate(raw) {
     fillMode: pick(s.fillMode, ids(FILL_MODES), DEFAULTS.fillMode),
     zoomKit: bool(s.zoomKit, DEFAULTS.zoomKit),
     alignToMap: bool(s.alignToMap, DEFAULTS.alignToMap),
+    openSpot: bool(s.openSpot, DEFAULTS.openSpot),
   };
 }
 
@@ -126,6 +128,7 @@ export function describeSettings(raw) {
     `Morph: ${s.morph ? morphLabel(s.morphType) : "Off"}`,
     `Height limit: ${s.maxY ? `Y ${s.maxY}` : "None"}`,
     `Hide in water: ${s.allowWater ? "Yes" : "No"}`,
+    `Spot must be open to the outside: ${s.openSpot ? "Yes" : "No (bunkers allowed)"}`,
     `Hostile mobs: ${s.peaceful ? "Off (Peaceful)" : "On"}`,
     `Rotations: ${s.rotations}${s.rotations > 1 ? " (new random location each time)" : ""}`,
     `Finding the hider: ${CAPTURE_MODES.find(([id]) => id === s.captureMode)[1]}`,

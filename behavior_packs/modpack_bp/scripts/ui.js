@@ -269,10 +269,11 @@ async function customSettingsMenu(player) {
     .dropdown("How seekers find a hider (disguised hiders always have to be hit)", CAPTURE_MODES.map(([, label]) => label), {
       defaultValueIndex: Math.max(0, CAPTURE_MODES.findIndex(([id]) => id === s.captureMode)),
     })
+    .toggle("Spot must be open to the outside (no sealed bunkers, trapdoor pits or tunnels)", { defaultValue: s.openSpot !== false })
     .submitButton("Save");
   const res = await show(form, player);
   if (!res || res.canceled || !res.formValues) return;
-  const [morph, morphType, height, allowWater, peaceful, rotations, fill, zoomKit, alignToMap, capture] = res.formValues;
+  const [morph, morphType, height, allowWater, peaceful, rotations, fill, zoomKit, alignToMap, capture, openSpot] = res.formValues;
   const next = {
     morph: !!morph,
     morphType: MORPH_TYPES[morphType]?.[0] ?? "both",
@@ -284,6 +285,7 @@ async function customSettingsMenu(player) {
     zoomKit: !!zoomKit,
     alignToMap: !!alignToMap,
     captureMode: CAPTURE_MODES[capture]?.[0] ?? "sight",
+    openSpot: openSpot !== false,
   };
   saveSettings(next);
   player.sendMessage("§dSettings saved. They apply from the next game started:");
@@ -296,7 +298,9 @@ function howToPlay(player) {
     "§l1. Hide§r",
     `The hider gets ${game.fmt(CONFIG.hidingSeconds)} in Creative to build or find a spot. ` +
       `Going over costs ${CONFIG.overtimePenaltyPerSecond}s of score per second.`,
-    "Your spot must be On Ground, Dry (no water or lava), Above Sea Level, Near Sky Light, in the Overworld " +
+    "Your spot must be On Ground, Dry (no water or lava), Above Sea Level, Near Sky Light, an Open Spot (it " +
+      "connects to the outside through see-through blocks like leaves or an open door (glass doesn't count), or it's in a natural cave: no " +
+      "dug-out bunkers, trapdoor pits or tunnels), in the Overworld " +
       `and Inside the Play Area (${CONFIG.playAreaRadius * 2}x${CONFIG.playAreaRadius * 2}). The admin can change some of these.`,
     "Lock in from the menu. You stay in Creative with every item, but you're frozen in place (you can still " +
       "look around and use or place blocks within reach).",
@@ -355,7 +359,7 @@ function howToPlay(player) {
 
 function hiderBuildMenu(player) {
   const s = game.state;
-  const rules = checkSpotRules(player, s.center, s.rules ?? {}, s.disguise);
+  const rules = checkSpotRules(player, s.center, game.spotRuleOptions(), s.disguise);
   const timer = s.hidingLeft > 0 ? `Build time left: ${game.fmt(s.hidingLeft)}` : `§cOVERTIME: +${s.overtime}s§r`;
   const look = s.rules?.morph ? `\nDisguise: ${s.disguise ? prettyId(s.disguise.type) : "§cnot picked§r"}` : "";
   const body = `${timer}${look}\n\nSpot rules (where you're standing now):\n${formatRules(rules)}`;

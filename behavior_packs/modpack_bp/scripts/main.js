@@ -13,7 +13,9 @@ world.afterEvents.entityHitEntity.subscribe((event) => {
 world.afterEvents.entityHitBlock.subscribe((event) => {
   game.onBlockHit(event.damagingEntity, event.hitBlock.location, event.hitBlock.dimension);
 });
+world.beforeEvents.explosion?.subscribe((event) => game.beforeExplosion(event)); // blown-up blocks count as dug
 world.afterEvents.playerBreakBlock.subscribe((event) => {
+  game.onBreakBlock(event.player, event.block.location); // dug-out blocks (Open Spot rule)
   game.onBlockHit(event.player, event.block.location, event.block.dimension);
 });
 
