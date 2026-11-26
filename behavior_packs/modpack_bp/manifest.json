@@ -4,27 +4,27 @@
     "name": "Extreme Hide & Seek BP",
     "description": "Build-your-spot hide and seek with questions",
     "uuid": "cc401950-893b-4dd0-80ef-9059ed29c628",
-    "version": [0, 31, 0],
+    "version": [0, 31, 1],
     "min_engine_version": [1, 21, 90]
   },
   "modules": [
     {
       "type": "data",
       "uuid": "03093d05-404e-4ba0-b4e1-69647b5f174f",
-      "version": [0, 31, 0]
+      "version": [0, 31, 1]
     },
     {
       "type": "script",
       "language": "javascript",
       "uuid": "b4bd10e4-9dd2-4f0d-b344-7b8b40f29e8e",
       "entry": "scripts/main.js",
-      "version": [0, 31, 0]
+      "version": [0, 31, 1]
     }
   ],
   "dependencies": [
     {
       "uuid": "72b20259-71a2-4c15-9f77-a5c1fe789676",
-      "version": [0, 31, 0]
+      "version": [0, 31, 1]
     },
     {
       "module_name": "@minecraft/server",

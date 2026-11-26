@@ -20,6 +20,7 @@ for the `/scriptevent hs:*` backup commands), and at least two players unless a 
 ## 2. Full multiplayer rotation
 
 - [ ] Join → Start: coordinates turn on, it becomes midday and stays there, and the hider order is announced.
+- [ ] Each new turn (including the first): every player's inventory, armor and off hand are emptied; everyone has the game book again, the hider wears the locked head, seekers get their map (or take it from the station chest).
 - [ ] Start while standing in a lake: everyone starts on the nearest land. Start far out at sea: a plank
       platform appears and everyone starts on it. Map station on water gets its own platform.
 - [ ] Hider gets 5 minutes in Creative; the spot rules on the action bar update live as they move.
