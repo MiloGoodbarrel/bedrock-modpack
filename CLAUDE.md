@@ -47,7 +47,8 @@ line given in the session instructions.
 
 - No Node.js on the owner's machine; Python 3 is installed.
 - Pure-JS tests: `node tests/geometry.test.js` / `node tests/hand.test.js` with Node, or serve the repo with
-  `python -m http.server 8765 --bind 127.0.0.1` and open `http://127.0.0.1:8765/tests/run.html` in the
+  `python tests/serve.py` (a no-cache server: plain `python -m http.server` lets the browser test stale
+  cached files) and open `http://127.0.0.1:8765/tests/run.html` in the
   browser (Claude in Chrome can read the result).
   The page title becomes PASS or FAIL. It maps `@minecraft/server` / `@minecraft/server-ui` to fakes in
   `tests/mocks/` with an import map, so real modules (rules, questions, cards...) run against a fake world.

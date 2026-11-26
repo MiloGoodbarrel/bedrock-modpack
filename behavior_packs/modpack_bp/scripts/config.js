@@ -39,6 +39,9 @@ export const CONFIG = {
   // the hider on their bar, set this to false: the bar is then off for everyone during games.
   hiderLocatorBar: true,
   hiderHeadItem: "minecraft:player_head",
+  // Nobody starts in water: a start point on water moves to the nearest land within this many blocks, and
+  // gets a plank platform built on the water if there's none.
+  startLandSearch: 96,
   // Rotations (admin setting): after everyone has hidden, everyone moves to a new random location this far from
   // the old start point (far enough that the new play area doesn't overlap the old one).
   relocateMinDistance: 1500,

@@ -20,9 +20,13 @@ for the `/scriptevent hs:*` backup commands), and at least two players unless a 
 ## 2. Full multiplayer rotation
 
 - [ ] Join → Start: coordinates turn on, it becomes midday and stays there, and the hider order is announced.
+- [ ] Start while standing in a lake: everyone starts on the nearest land. Start far out at sea: a plank
+      platform appears and everyone starts on it. Map station on water gets its own platform.
 - [ ] Hider gets 5 minutes in Creative; the spot rules on the action bar update live as they move.
 - [ ] Locking in fails with a clear reason when a rule is red; succeeds when all are green.
 - [ ] After lock-in the hider can't walk or fly, but can look around and place/break blocks; Creative stays.
+- [ ] Hider can't place bedrock, barriers, end portal frames, command blocks or light blocks (blocked with a
+      message, and removed from their inventory); can't pick one as a block disguise.
 - [ ] Overtime: locking in late subtracts 60 score-seconds per second late.
 - [ ] Seekers in Survival; asking order shown; only the current asker can ask; the turn passes after 60s.
 - [ ] Each question can only be asked once per round (greyed out afterwards).
