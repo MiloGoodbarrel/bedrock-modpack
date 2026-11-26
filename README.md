@@ -11,7 +11,7 @@ ConnorIGL on YouTube. This is an independent rebuild for Bedrock. No code or ass
 Works on Windows, Xbox, PlayStation, Switch, mobile and Realms. **No experimental toggles needed.**
 Requires Minecraft Bedrock **1.21.90 or newer**.
 
-> **Status:** early development (v0.25.0). Every feature below is written, but none of it has been playtested
+> **Status:** early development (v0.26.0). Every feature below is written, but none of it has been playtested
 > in game yet, so expect bugs. Please report anything that shows up in the Content Log (Settings → Creator).
 
 ## How to play
@@ -58,9 +58,17 @@ To make someone an admin without operator permission, run `/tag <name> add hs_ad
 With morph mode on, the hider picks a disguise from the menu before locking in:
 
 - **Mob:** the hider turns invisible and can't walk, but can still look around. A real mob of the chosen
-  type stays on their spot and copies where they look.
+  type stays on their spot and copies where they look. There are 12 passive mobs. Horses and llamas were
+  left out because seekers could ride them, and goats because they ram players. Invisible players still show
+  armor and held items, so the hider's armor and off-hand item go into their inventory and their hands are
+  kept empty for the whole round.
 - **Block:** the chosen block (from a list, or whatever block you're holding) appears where the hider stands,
-  and the hider watches from inside it. It can't be the same as any block touching it.
+  and the hider watches from inside it. It can't be the same as any block touching it, and it only goes
+  where there's room (air, water or small plants, which come back afterwards). If the block is knocked out
+  of place some other way than a seeker breaking it (a sand or gravel disguise falling, an explosion, a
+  piston), the hider counts as found. Blocks are placed facing their default direction.
+- If a disguised hider logs off and comes back after their round is over, the invisibility or Spectator
+  mode is removed automatically.
 
 Disguised hiders can't be found by sight. Seekers have to **hit** the suspicious mob or block. Bot hiders
 disguise themselves too, and bot seekers find a disguised hider by walking right up to it.
@@ -318,7 +326,8 @@ owner has tried it and approved it. The full steps are in [CLAUDE.md](CLAUDE.md)
 - [x] Parity spec P0 (correctness and integrity): conservative map blackout, capped hand, lava rule,
       teleport validation, safe morph world edits. See [docs/parity.md](docs/parity.md)
 - [x] Parity spec P1: attributed challenge detection, 3 new challenges, safe tasks, capture presets
-- [ ] Parity spec P2–P4: morph polish, presets, more tests
+- [x] Parity spec P2: morph polish (no floating gear, safe decoys, moved-block capture, reconnect cleanup)
+- [ ] Parity spec P3–P4: presets, UI polish, more tests
 
 See [docs/game-rules.md](docs/game-rules.md) for the full reference rules gathered from the videos.
 

@@ -12,23 +12,26 @@ const { world, BlockPermutation } = mc;
 export const DECOY_TAG = "hs_decoy";
 const DIMENSIONS = ["minecraft:overworld", "minecraft:nether", "minecraft:the_end"];
 
+// Mobs a hider can become. Kept to passive mobs that seekers can't ride (horse, llama) and that don't ram or
+// knock players around (goat), so the decoy can't affect the game by itself. Expand only after testing in game.
 export const MOBS = [
   ["minecraft:pig", "Pig"],
   ["minecraft:cow", "Cow"],
   ["minecraft:sheep", "Sheep"],
   ["minecraft:chicken", "Chicken"],
   ["minecraft:rabbit", "Rabbit"],
-  ["minecraft:goat", "Goat"],
-  ["minecraft:horse", "Horse"],
   ["minecraft:villager_v2", "Villager"],
   ["minecraft:cat", "Cat"],
   ["minecraft:fox", "Fox"],
   ["minecraft:wolf", "Wolf"],
-  ["minecraft:llama", "Llama"],
   ["minecraft:panda", "Panda"],
   ["minecraft:frog", "Frog"],
   ["minecraft:armadillo", "Armadillo"],
 ];
+
+// Put on a player while a morph changes them (invisibility, Spectator, movement lock), so the change can be
+// undone even if they log off and the game ends or resets before they come back.
+export const MORPH_TAG = "hs_morphed";
 
 export const BLOCKS = [
   ["minecraft:stone", "Stone"],
@@ -195,16 +198,67 @@ export function setMovement(player, allowed) {
   } catch {}
 }
 
-/** Selects an empty hotbar slot so an invisible hider isn't holding a floating item. */
+/**
+ * Makes sure an invisible hider isn't holding anything (it would float in the air): selects an empty hotbar
+ * slot, or moves the held item into the main inventory if the hotbar is full. Returns true if the hand is
+ * empty afterwards.
+ */
 export function emptyHands(player) {
   try {
     const inv = player.getComponent("minecraft:inventory")?.container;
-    if (!inv) return;
+    if (!inv) return false;
+    if (!inv.getItem(player.selectedSlotIndex)) return true;
     for (let i = 0; i < 9; i++) {
       if (!inv.getItem(i)) {
         player.selectedSlotIndex = i;
-        return;
+        return true;
+      }
+    }
+    for (let i = 9; i < inv.size; i++) {
+      if (!inv.getItem(i)) {
+        inv.moveItem(player.selectedSlotIndex, i, inv);
+        return true;
       }
     }
   } catch {}
+  return false;
+}
+
+const WORN = ["Head", "Chest", "Legs", "Feet", "Offhand"];
+
+/**
+ * Invisible players still show their armor and off-hand item. Moves anything worn (and the off-hand item,
+ * e.g. a map) into the inventory. Items only move if there's room, so nothing gets dropped on the ground
+ * next to the hider. Returns the slots that still have something in them.
+ */
+export function stripVisibleGear(player) {
+  const left = [];
+  try {
+    const eq = player.getComponent("minecraft:equippable");
+    const inv = player.getComponent("minecraft:inventory")?.container;
+    if (!eq || !inv) return left;
+    for (const slot of WORN) {
+      const item = eq.getEquipment(slot);
+      if (!item) continue;
+      if (inv.emptySlotsCount > 0) {
+        inv.addItem(item);
+        eq.setEquipment(slot, undefined);
+      } else {
+        left.push(slot);
+      }
+    }
+  } catch {}
+  return left;
+}
+
+/** True if the player is wearing or holding something that would float while they're invisible. */
+export function showsGear(player) {
+  try {
+    const eq = player.getComponent("minecraft:equippable");
+    if (WORN.some((slot) => !!eq?.getEquipment(slot))) return true;
+    const inv = player.getComponent("minecraft:inventory")?.container;
+    return !!inv?.getItem(player.selectedSlotIndex);
+  } catch {
+    return false;
+  }
 }

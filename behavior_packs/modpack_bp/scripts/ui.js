@@ -302,7 +302,10 @@ function disguiseMenu(player) {
 }
 
 function mobMenu(player) {
-  const body = "Once you lock in you turn into this mob. You can look around but not walk. Seekers find you by hitting you.";
+  const body =
+    "Once you lock in you turn into this mob. You can look around but not walk. Seekers find you by hitting you.\n" +
+    "§7You're invisible, so armor and your off-hand item go into your inventory and your hands stay empty " +
+    "(anything you held would float in the air).§r";
   const buttons = MOBS.map(([id, label]) => [label, () => game.chooseDisguise(player, "mob", id)]);
   buttons.push(["Back", () => hiderBuildMenu(player), ICON.back]);
   return menu(player, "Become a mob", body, buttons);
