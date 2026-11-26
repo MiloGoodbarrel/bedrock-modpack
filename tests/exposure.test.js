@@ -8,13 +8,13 @@ export function runExposureTests(e) {
   };
 
   // See-through classification.
-  for (const id of ["minecraft:air", "minecraft:oak_leaves", "minecraft:glass", "minecraft:glass_pane", "minecraft:oak_fence",
+  for (const id of ["minecraft:air", "minecraft:oak_leaves", "minecraft:oak_fence",
     "minecraft:cobblestone_wall", "minecraft:iron_bars", "minecraft:short_grass", "minecraft:poppy", "minecraft:water",
     "minecraft:red_mushroom", "minecraft:oak_fence_gate", "minecraft:torch"]) {
     check(`${id} is see-through`, e.isSeeThrough(id));
   }
   for (const id of ["minecraft:dirt", "minecraft:stone", "minecraft:oak_planks", "minecraft:grass_block", "minecraft:red_mushroom_block",
-    "minecraft:oak_log", "minecraft:lava"]) {
+    "minecraft:oak_log", "minecraft:lava", "minecraft:glass", "minecraft:glass_pane", "minecraft:tinted_glass"]) {
     check(`${id} is not see-through`, !e.isSeeThrough(id));
   }
   check("closed trapdoor is not see-through", !e.isSeeThrough("minecraft:oak_trapdoor", { open_bit: false }));

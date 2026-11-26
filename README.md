@@ -11,7 +11,7 @@ ConnorIGL on YouTube. This is an independent rebuild for Bedrock. No code or ass
 Works on Windows, Xbox, PlayStation, Switch, mobile and Realms. **No experimental toggles needed.**
 Requires Minecraft Bedrock **1.21.90 or newer**.
 
-> **Status:** early development (v0.30.0). Every feature below is written, but none of it has been playtested
+> **Status:** early development (v0.30.1). Every feature below is written, but none of it has been playtested
 > in game yet, so expect bugs. Please report anything that shows up in the Content Log (Settings → Creator).
 
 ## How to play
@@ -122,7 +122,7 @@ background, so they never load far-off chunks.
 | Dry | Not in water, lava, bubble columns, powder snow, or waterlogged blocks (with water allowed: "Not in Lava") |
 | Above Sea Level | At Y 63 or higher |
 | Near Sky Light | Open sky within 2 blocks of the hider (any block overhead counts as cover, including glass and leaves; the add-on's own sky layer is ignored) |
-| Open Spot | The spot must connect to the outside through see-through space (air, leaves, glass, fences, plants, open doors and trapdoors) within 6 blocks, at ground level; **or** be part of a natural open space of 30+ blocks (a cave or ravine). Blocks the hider dug out or blew up never count as natural, so a hand-dug pit, tunnel, shaft or bunker fails, while a leaf pocket, a spot under a mushroom, or a natural cave wall passes. Admin toggle, on by default |
+| Open Spot | The spot must connect to the outside through see-through space (air, leaves, fences, plants, open doors and trapdoors; not glass, so a box with a window is still a bunker) within 6 blocks, at ground level; **or** be part of a natural open space of 30+ blocks (a cave or ravine). Blocks the hider dug out or blew up never count as natural, so a hand-dug pit, tunnel, shaft or bunker fails, while a leaf pocket, a spot under a mushroom, or a natural cave wall passes. Admin toggle, on by default |
 | In the Overworld | Games are Overworld-only |
 | Inside Play Area | Within the 1000×1000 square around the start point |
 | Room for the Block | Block morph only: nothing solid where the disguise block goes |

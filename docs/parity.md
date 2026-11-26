@@ -20,7 +20,7 @@ not confirmed) · **Bedrock adaptation** (same idea, different mechanism because
 | Overtime penalty, 60 score-seconds per second late | inferred reference | Video house rule; configurable |
 | Stationary hider after lock-in | verified reference | Movement input lock plus a 0.4-block snap-back |
 | Hider keeps Creative after lock-in | original extension | Requested by the project owner |
-| Open Spot rule (no dug-out bunkers) | original extension | Requested after a playtest: reaches the outside through see-through blocks within 6, at ground level, or a natural 30+ block space; blocks the hider dug or blew up never count as natural. Admin toggle |
+| Open Spot rule (no dug-out bunkers) | original extension | Requested after a playtest: reaches the outside through see-through blocks (not glass) within 6, at ground level, or a natural 30+ block space; blocks the hider dug or blew up never count as natural. Admin toggle |
 | No unbreakable blocks for the hider | original extension | Bedrock, barriers, portal frames, command blocks and similar can't be placed while hiding |
 | Spot rules: ground, dry, above sea level, near sky light | verified reference | Sky light is a geometric check (no light API in the pinned Script API 2.0.0); lava always rejected |
 | 1000×1000 arena | inferred reference | From "within 500 blocks" being useful; configurable |

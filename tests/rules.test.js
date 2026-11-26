@@ -52,7 +52,7 @@ export function runRulesTests({ rules, questions, scoring, cards, mc }) {
     // Roof over a 5x5 area (sky-light radius 2) at y=70: no open sky nearby.
     const roof = {};
     for (let x = -2; x <= 2; x++) for (let z = -2; z <= 2; z++) roof[`${x},70,${z}`] = "minecraft:glass";
-    check("fully roofed (even glass) fails Near Sky Light", ruleMap(mc.makePlayer({ dimension: floor(roof) }))["Near Sky Light"] === false);
+    check("fully roofed (glass) fails Near Sky Light", ruleMap(mc.makePlayer({ dimension: floor(roof) }))["Near Sky Light"] === false);
     delete roof["2,70,2"];
     check("one open column within 2 passes", ruleMap(mc.makePlayer({ dimension: floor(roof) }))["Near Sky Light"] === true);
   }
@@ -148,13 +148,14 @@ export function runRulesTests({ rules, questions, scoring, cards, mc }) {
     for (let x = -2; x <= 2; x++) for (let z = -2; z <= 2; z++) shroom[`${x},68,${z}`] = "minecraft:red_mushroom_block";
     check("under a mushroom cap passes", spot(shroom, { y: 64 }) === true);
 
-    // A sealed dirt box on the surface fails; a glass window opens it up.
+    // A sealed dirt box on the surface fails, even with a glass window; a real doorway opens it up.
     const box = {};
     for (let x = -10; x <= 10; x++) for (let z = -10; z <= 10; z++) box[`${x},63,${z}`] = "minecraft:stone";
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (let y = 64; y <= 66; y++) box[`${dx},${y},${dz}`] = "minecraft:dirt";
     box["0,66,0"] = "minecraft:dirt";
     check("sealed dirt box fails", spot(box, { y: 64 }) === false);
-    check("same box with a glass window passes", spot({ ...box, "1,65,0": "minecraft:glass" }, { y: 64 }) === true);
+    check("same box with a glass window still fails", spot({ ...box, "1,65,0": "minecraft:glass" }, { y: 64 }) === false);
+    check("same box with an open doorway passes", spot({ ...box, "1,65,0": "minecraft:air", "1,64,0": "minecraft:air" }, { y: 64 }) === true);
 
     // The admin can switch the rule off.
     check("rule absent when switched off", ruleMap(mc.makePlayer({ dimension: mc.makeDimension({ blocks: sealed }), x: 3.5, y: 61 }), { openSpot: false })["Open Spot"] === undefined);

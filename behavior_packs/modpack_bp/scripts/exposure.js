@@ -1,13 +1,15 @@
 // "Open to Outside" spot rule, as pure functions (no Minecraft imports, so it can be tested outside the game).
 //
 // A hiding spot has to connect to the outside world through see-through space: starting from the hider's feet
-// and head, a flood fill moves through see-through blocks (air, leaves, glass, fences, plants, open doors...)
+// and head, a flood fill moves through see-through blocks (air, leaves, fences, plants, open doors; not glass)
 // and must reach a block with open sky above it within a few steps. A leaf pocket in a tree or a spot under a
 // mushroom cap passes; a pit with a trapdoor lid, a sealed tunnel or a deep cave doesn't.
 
 // Blocks you can see through (or past). Matched against the type id; doors and trapdoors only when open.
+// Glass and glass panes deliberately do NOT count: a sealed glass box (or a box with a glass window) is still a
+// bunker. A built enclosure needs a real opening.
 const SEE_THROUGH =
-  /(leaves|glass|pane|fence|_wall$|iron_bars|chain|flower|tulip|dandelion|poppy|orchid|allium|bluet|daisy|lilac|peony|rose_bush|lily|grass$|fern|vine|sapling|bush|sugar_cane|reeds|torch|carpet|snow_layer|ladder|sign|button|rail|lever|lantern|kelp|seagrass|water|bubble_column|_mushroom$|^minecraft:(red|brown)_mushroom$|petals|leaf_litter|wildflowers|azalea$|scaffolding|cobweb|tripwire|pressure_plate|candle|banner|head|skull|pot$|end_rod|lightning_rod|chain)/;
+  /(leaves|fence|_wall$|iron_bars|chain|flower|tulip|dandelion|poppy|orchid|allium|bluet|daisy|lilac|peony|rose_bush|lily|grass$|fern|vine|sapling|bush|sugar_cane|reeds|torch|carpet|snow_layer|ladder|sign|button|rail|lever|lantern|kelp|seagrass|water|bubble_column|_mushroom$|^minecraft:(red|brown)_mushroom$|petals|leaf_litter|wildflowers|azalea$|scaffolding|cobweb|tripwire|pressure_plate|candle|banner|head|skull|pot$|end_rod|lightning_rod|chain)/;
 const OPENABLE = /(door|trapdoor|fence_gate)$/;
 
 /** True if a block of this type (with these block states) can be seen through. */

@@ -299,7 +299,7 @@ function howToPlay(player) {
     `The hider gets ${game.fmt(CONFIG.hidingSeconds)} in Creative to build or find a spot. ` +
       `Going over costs ${CONFIG.overtimePenaltyPerSecond}s of score per second.`,
     "Your spot must be On Ground, Dry (no water or lava), Above Sea Level, Near Sky Light, an Open Spot (it " +
-      "connects to the outside through see-through blocks like leaves or glass, or it's in a natural cave: no " +
+      "connects to the outside through see-through blocks like leaves or an open door (glass doesn't count), or it's in a natural cave: no " +
       "dug-out bunkers, trapdoor pits or tunnels), in the Overworld " +
       `and Inside the Play Area (${CONFIG.playAreaRadius * 2}x${CONFIG.playAreaRadius * 2}). The admin can change some of these.`,
     "Lock in from the menu. You stay in Creative with every item, but you're frozen in place (you can still " +

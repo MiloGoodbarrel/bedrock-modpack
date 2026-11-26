@@ -22,7 +22,7 @@ export const CONFIG = {
   // Hider rule: "Near Sky Light" checks columns within this many blocks for open sky.
   skyLightRadius: 2,
   // Hider rule: "Open to Outside" (admin toggle) must reach open sky through see-through blocks within this
-  // many blocks of the hider. Stops sealed bunkers, trapdoor pits and tunnels.
+  // many blocks of the hider (glass doesn't count). Stops sealed bunkers, trapdoor pits and tunnels.
   openToOutsideSteps: 6,
   // ...or the hider must be in a natural open space (a cave, a ravine) at least this many blocks big. Blocks the
   // hider dug out or blew up don't count, so hand-dug pits, tunnels and bunkers still fail.
