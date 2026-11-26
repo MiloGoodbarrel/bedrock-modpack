@@ -484,6 +484,16 @@ export function onPlayerSpawn(player) {
   else unmask(player);
   // A locked-in hider stays frozen after rejoining; anyone else is unfrozen (e.g. after a crash mid-round).
   disguise.setMovement(player, !(isHider(player) && state.phase === "seeking"));
+  // Someone who logged off while morphed and came back after their round ended: undo the morph's effects.
+  const stillMorphed = isHider(player) && state.phase === "seeking" && state.disguise?.applied;
+  try {
+    if (player.hasTag(disguise.MORPH_TAG) && !stillMorphed) {
+      player.removeTag(disguise.MORPH_TAG);
+      player.removeEffect("invisibility");
+      if (player.getGameMode?.() === GM_SPECTATOR) setMode(player, GM_SURVIVAL);
+      tell(player, "§7Your disguise from an earlier round has been removed.");
+    }
+  } catch {}
   if (state.phase === "hiding" || state.phase === "seeking") forceCoordinates();
   // Keep the stored display name current.
   const entry = state.players.find((x) => x.id === player.id);
@@ -714,8 +724,15 @@ function applyDisguise(player) {
     try {
       player.addEffect("invisibility", 20000000, { amplifier: 0, showParticles: false });
     } catch {}
+    try {
+      player.addTag(disguise.MORPH_TAG);
+    } catch {}
     unmask(player); // invisible already hides them from the locator bar; a head would float in the air
+    // Armor, the off-hand item and anything held would float in mid-air: put them away.
+    const stuck = disguise.stripVisibleGear(player);
     disguise.emptyHands(player);
+    tell(player, "§dYou're invisible: armor and your off-hand item went into your inventory, and your hands stay empty.");
+    if (stuck.length) tell(player, `§cYour inventory is full, so your ${stuck.join(", ").toLowerCase()} still shows. Make room!`);
   } else {
     const original = disguise.placeBlock(player.dimension, state.spot, d.type);
     if (!original) {
@@ -724,6 +741,9 @@ function applyDisguise(player) {
       return;
     }
     d.original = original; // what was there before, put back when the round ends
+    try {
+      player.addTag(disguise.MORPH_TAG);
+    } catch {}
     setMode(player, GM_SPECTATOR);
   }
   d.applied = true;
@@ -738,6 +758,7 @@ function removeDisguise() {
   if (p) {
     try {
       p.removeEffect("invisibility");
+      p.removeTag(disguise.MORPH_TAG);
     } catch {}
     if (d.kind === "block") setMode(p, GM_SURVIVAL);
   }
@@ -1530,6 +1551,41 @@ export function canSee(seeker, hider) {
 }
 
 const sightStreak = new Map(); // seeker id -> consecutive checks with the hider in view
+let gearWarned = 0; // tick of the last "your gear shows" warning
+
+/**
+ * Keeps a disguise honest while seeking. Returns true if the round ended because of it.
+ * - Mob morph (person): the hider is invisible, so anything held or worn would float. Hands are kept empty
+ *   and new armor / off-hand items are put away.
+ * - Block morph: if the disguise block is gone or replaced without a seeker breaking it (it fell, blew up,
+ *   got pushed by a piston...), the hider has been exposed, so the round ends.
+ */
+function guardDisguise(hider) {
+  const d = state.disguise;
+  if (d.kind === "mob" && !isBotId(hiderId()) && disguise.showsGear(hider)) {
+    disguise.stripVisibleGear(hider);
+    disguise.emptyHands(hider);
+    if (disguise.showsGear(hider) && system.currentTick - gearWarned > 200) {
+      gearWarned = system.currentTick;
+      tell(hider, "§cYou're invisible, but what you're holding or wearing still shows. Make room in your inventory!");
+    }
+  }
+  if (d.kind === "block" && state.spot) {
+    const s = state.spot;
+    let block;
+    try {
+      block = world.getDimension(s.dimId).getBlock({ x: Math.floor(s.x), y: Math.floor(s.y), z: Math.floor(s.z) });
+    } catch {
+      return false; // not loaded: can't tell, so don't end the round
+    }
+    if (block && block.typeId !== d.type) {
+      broadcast(`§6${nameOf(hiderId())}'s disguise block was knocked out of place!`);
+      found({ name: "The seekers" });
+      return true;
+    }
+  }
+  return false;
+}
 
 /** Runs a few times per second: seekers (people and bots) spotting the hider. */
 export function tickFast() {
@@ -1541,6 +1597,7 @@ export function tickFast() {
   if (state.disguise?.applied) {
     // Disguised hiders are only found by hitting them, so no line-of-sight check.
     pinDecoy(hider);
+    if (guardDisguise(hider)) return;
   } else if (mode !== "hit") {
     // "sight": spotted the moment a seeker looks at them. "sustained": they must stay in view for a while.
     const need = mode === "sustained" ? CONFIG.sustainedSightChecks : 1;

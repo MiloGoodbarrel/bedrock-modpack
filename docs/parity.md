@@ -95,3 +95,17 @@ not confirmed) · **Bedrock adaptation** (same idea, different mechanism because
 | Biome/elevation map filtering | Not added: biome needs loaded chunks everywhere, and elevation is unreliable with player-built spots. The map only uses x/z clues, which is always correct |
 | Cancelled questions | Count as used and earn no powerups. Unverified against the original |
 | Separate pig/cow/sheep/rabbit task buttons | Not added: not confirmed in the reference |
+
+## P2 status (spec batch 3)
+
+| Item | Result |
+|---|---|
+| Mob list | Trimmed to 12: horse and llama (rideable) and goat (rams players) removed. Not expanded: needs in-game validation of spawn, size and behaviour first |
+| Armor, held items, off-hand reveal an invisible hider | Done: moved into the inventory at morph time and kept off for the whole round (only moved if there's room, never dropped next to the hider) |
+| Name tags, particles | Hider's name tag is hidden; invisibility has particles off. Shadows can't be controlled from scripts (runtime unverified) |
+| Decoy behaviour | Passive, non-rideable mobs only; pinned to the hider several times a second; resistance 255. A decoy that dies or despawns is respawned |
+| Reconnect / reset restoration | Done: a `hs_morphed` tag marks a morphed player, and invisibility / Spectator are undone when they rejoin after their round |
+| Block morph adjacency | All six touching blocks checked (unchanged) |
+| Block states | Not preserved for the disguise itself: held items don't carry block states, so blocks use their default orientation (documented) |
+| Gravity / moved blocks | Done: if the disguise block disappears or changes without a seeker breaking it (falls, explodes, pushed), the hider counts as found |
+| Spectator scouting | Movement locked and 0.4-block snap-back, so the camera can't leave the block |
