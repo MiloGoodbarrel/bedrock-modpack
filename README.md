@@ -11,7 +11,7 @@ ConnorIGL on YouTube. This is an independent rebuild for Bedrock. No code or ass
 Works on Windows, Xbox, PlayStation, Switch, mobile and Realms. **No experimental toggles needed.**
 Requires Minecraft Bedrock **1.21.90 or newer**.
 
-> **Status:** early development (v0.31.0). Every feature below is written, but none of it has been playtested
+> **Status:** early development (v0.31.1). Every feature below is written, but none of it has been playtested
 > in game yet, so expect bugs. Please report anything that shows up in the Content Log (Settings → Creator).
 
 ## How to play
@@ -30,6 +30,8 @@ Requires Minecraft Bedrock **1.21.90 or newer**.
 6. **Found:** as soon as a seeker has the hider in clear line of sight (within 24 blocks), or hits them, the
    hider is found and their time goes on the scoreboard. A disguised hider has to be hit. The next player
    hides.
+   **Every player's inventory, armor and off hand are cleared at the start of each turn**; everyone gets the
+   game book (and their fresh map) back.
 7. When everyone has hidden, the longest hide time (including time-bonus cards) wins.
 
 ### Admin settings

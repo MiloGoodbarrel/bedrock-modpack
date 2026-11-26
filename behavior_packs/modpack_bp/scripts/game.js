@@ -642,6 +642,7 @@ function startTurn(turn) {
   const dimension = world.getDimension(state.dimId);
   for (const p of world.getAllPlayers()) {
     if (!isJoined(p)) continue;
+    clearEverything(p); // everyone starts each turn empty-handed (then gets the book and a fresh map back)
     if (p.id === id) {
       setMode(p, GM_CREATIVE);
       hideNameTag(p);
@@ -667,6 +668,27 @@ function startTurn(turn) {
   const rot = rotations > 1 ? ` · rotation ${(state.cycle ?? 0) + 1} of ${rotations}` : "";
   titleAll(`§e${nameOf(id)} is hiding`, `Round ${turn + 1} of ${state.order.length}${rot}`);
   sfx("hiderAnnounced");
+}
+
+/** Empties a player's inventory, armor and off hand (including locked items), then gives the game book back. */
+function clearEverything(player) {
+  try {
+    player.runCommand("clear @s");
+  } catch {}
+  // Belt and braces in case the command missed anything.
+  try {
+    const inv = player.getComponent("minecraft:inventory")?.container;
+    for (let i = 0; i < (inv?.size ?? 0); i++) if (inv.getItem(i)) inv.setItem(i, undefined);
+  } catch {}
+  try {
+    const eq = player.getComponent("minecraft:equippable");
+    for (const slot of ["Head", "Chest", "Legs", "Feet", "Offhand"]) {
+      try {
+        if (eq?.getEquipment(slot)) eq.setEquipment(slot, undefined);
+      } catch {}
+    }
+  } catch {}
+  giveMenuItem(player);
 }
 
 /** Identifies the current hider's round (game, rotation, turn); stale callbacks compare against it. */
