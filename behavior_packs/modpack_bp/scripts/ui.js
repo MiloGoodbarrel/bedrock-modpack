@@ -18,9 +18,12 @@ import {
   FILL_MODES,
   ROTATIONS,
   CAPTURE_MODES,
+  PRESETS,
+  presetSettings,
+  matchingPreset,
 } from "./settings.js";
 import { MOBS, BLOCKS, heldBlock, prettyId } from "./disguise.js";
-import { legend, cellBlocks } from "./map.js";
+import { legend, cellBlocks, ROW_LETTERS } from "./map.js";
 import { cardName, cardDesc, cardIcon, cardColor, bonusSeconds } from "./cards.js";
 import { challengeById } from "./challenges.js";
 
@@ -94,26 +97,36 @@ function mapButtons(player) {
 }
 
 function mapMenu(player) {
-  const lines = game.mapLines(player, CONFIG.menuMapSize);
+  const lines = game.mapLines(player, CONFIG.menuMapSize, true);
   const size = CONFIG.playAreaRadius * 2;
   const body = lines.length
-    ? `${lines.join("\n")}\n\n${legend(game.state)}\n§7${size}x${size} play area · each square is ~${cellBlocks(CONFIG.menuMapSize)} blocks§r`
+    ? `${lines.join("\n")}\n\n${legend(game.state)}\n§7${size}x${size} play area · each square is ~${cellBlocks(CONFIG.menuMapSize)} blocks. ` +
+      `Rows are lettered on the right (A at the top), columns count 1-${CONFIG.menuMapSize} from the left: ` +
+      "a square like C7 can be picked under Teleport.§r"
     : "The map shows up once a round starts.";
-  return menu(player, "Map", body, [["Refresh", () => mapMenu(player), ICON.map], back(player)]);
+  const buttons = [["Refresh", () => mapMenu(player), ICON.map]];
+  if (game.isSeeker(player) && game.state.phase === "seeking") {
+    buttons.push(["Teleport to a square...", () => teleportCellMenu(player), ICON.teleport]);
+  }
+  buttons.push(back(player));
+  return menu(player, "Map", body, buttons);
 }
 
 function catOf(qid) {
   return findQuestion(qid)?.category;
 }
 
+/** The clue log: every question in order, who asked, the answer, and how much of the area was left after it. */
 function cluesMenu(player) {
   const clues = game.state.clues;
+  const left = game.clueAreaLeft();
   const body = clues.length
     ? clues
         .map((c, i) => {
           const cat = catOf(c.qid);
           const color = c.cancelled ? "§c" : "§e";
-          return `${cat?.color ?? "§f"}${i + 1}. [${cat?.name ?? "?"}] §7${c.by}:§r ${c.text}\n   ${color}${c.answer}§r`;
+          const area = left[i] !== undefined ? ` §8(${Math.max(left[i] > 0 ? 1 : 0, Math.round(left[i] * 100))}% of the area left)` : "";
+          return `${cat?.color ?? "§f"}${i + 1}. [${cat?.name ?? "?"}] §7${c.by}:§r ${c.text}\n   ${color}${c.answer}§r${area}§r`;
         })
         .join("\n")
     : "No questions asked yet.";
@@ -157,9 +170,35 @@ function lobbyMenu(player) {
   return menu(player, "Extreme Hide & Seek", body, buttons);
 }
 
-async function settingsMenu(player) {
+/** Admin settings hub: one-tap presets, or every setting by hand. */
+function settingsMenu(player) {
   if (!isAdmin(player)) return player.sendMessage("§cOnly the world's admin (an operator) can change settings.");
   if (game.state.phase !== "lobby") return player.sendMessage("§cSettings can only be changed in the lobby.");
+  const body = `§7${describeSettings(getSettings())}§r\n\nPick a preset, or set everything yourself.`;
+  return menu(player, "Game settings", body, [
+    ["§l§dPresets§r\n§8Classic, morph modes, Extended, Solo", () => presetMenu(player), ICON.questions],
+    ["§lCustom settings§r\n§8every option", () => customSettingsMenu(player), ICON.options],
+    back(player),
+  ]);
+}
+
+function presetMenu(player) {
+  const current = matchingPreset(getSettings())?.id;
+  const buttons = PRESETS.map(([id, label, desc]) => [
+    `${id === current ? "§a✔ " : ""}§l${label}§r\n§8${desc.length > 60 ? `${desc.slice(0, 57)}...` : desc}`,
+    async () => {
+      if (!(await confirm(player, label, `${desc}\n\nUse this preset? It replaces all current settings.`))) return presetMenu(player);
+      saveSettings(presetSettings(id));
+      player.sendMessage(`§dPreset "${label}" saved. It applies from the next game started.`);
+      return settingsMenu(player);
+    },
+  ]);
+  buttons.push(["Back", () => settingsMenu(player), ICON.back]);
+  return menu(player, "Presets", "Presets set every option at once. You can still tweak them under Custom settings.", buttons);
+}
+
+async function customSettingsMenu(player) {
+  if (!isAdmin(player) || game.state.phase !== "lobby") return;
   const s = getSettings();
   const morphIndex = Math.max(0, MORPH_TYPES.findIndex(([id]) => id === s.morphType));
   const heightIndex = Math.max(0, HEIGHT_LIMITS.indexOf(s.maxY));
@@ -229,7 +268,8 @@ function howToPlay(player) {
     "Look straight at the hider with nothing in the way, or hit them, to find them (the admin can change " +
       "this to keeping them in view for a second, or hitting only).",
     `Seekers can teleport from the menu once every ${game.fmt(CONFIG.teleportCooldownSeconds)}, ` +
-      "to a teammate or to coordinates, but not into ruled-out areas or during a challenge.",
+      "to a teammate, a map square (like C7: row letters are on the right of the map) or coordinates, but not " +
+      "into ruled-out areas or during a challenge.",
     "The hider sees every seeker's direction and distance above their hotbar.",
     "",
     "§lThe map§r",
@@ -369,11 +409,43 @@ function teleportMenu(player) {
     `You can teleport once every ${game.fmt(CONFIG.teleportCooldownSeconds)}, but not into areas the answers ` +
     "have ruled out (dark on the map) and not during a challenge.";
   const buttons = game.teammates(player).map((t) => [`To ${t.name}`, () => game.teleportToTeammate(player, t.id), ICON.teleport]);
+  buttons.push(["To a map square... §8(e.g. C7)", () => teleportCellMenu(player), ICON.map]);
   buttons.push(["To coordinates...", () => teleportCoordsMenu(player), ICON.map]);
   const c = game.state.center;
   if (c) buttons.push(["To the start point", () => game.teleportToStart(player), ICON.hud]);
   buttons.push(back(player));
   return menu(player, "Teleport", body, buttons);
+}
+
+/**
+ * Stand-in for the Java mod's click-on-the-map teleport: pick a row and column of the menu map. The rows and
+ * columns list their block coordinates, so they also work without opening the map.
+ */
+async function teleportCellMenu(player) {
+  const s = game.state;
+  if (!s.center) return;
+  const size = CONFIG.menuMapSize;
+  const r = CONFIG.playAreaRadius;
+  const cell = (2 * r) / size;
+  const rows = [];
+  const cols = [];
+  for (let i = 0; i < size; i++) {
+    const z0 = Math.floor(s.center.z - r + i * cell);
+    const x0 = Math.floor(s.center.x - r + i * cell);
+    rows.push(`${ROW_LETTERS[i]}  (z ${z0} to ${Math.floor(z0 + cell)})`);
+    cols.push(`${i + 1}  (x ${x0} to ${Math.floor(x0 + cell)})`);
+  }
+  // Start on the square the player is standing in.
+  const here = Math.max(0, Math.min(size - 1, Math.floor((player.location.z - (s.center.z - r)) / cell)));
+  const hereCol = Math.max(0, Math.min(size - 1, Math.floor((player.location.x - (s.center.x - r)) / cell)));
+  const form = new ModalFormData()
+    .title("Teleport to a map square")
+    .dropdown("Row (A is the north edge)", rows, { defaultValueIndex: here })
+    .dropdown("Column (1 is the west edge)", cols, { defaultValueIndex: hereCol })
+    .submitButton("Teleport");
+  const res = await show(form, player);
+  if (!res || res.canceled || !res.formValues) return;
+  game.teleportToCell(player, res.formValues[0], res.formValues[1]);
 }
 
 async function teleportCoordsMenu(player) {

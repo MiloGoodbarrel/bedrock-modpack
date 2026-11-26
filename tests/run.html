@@ -29,6 +29,13 @@
   } catch (e) {
     results.push(["trackers", { passed: false, fails: [String(e)] }]);
   }
+  try {
+    const m = await import("../behavior_packs/modpack_bp/scripts/settingsmodel.js");
+    const { runSettingsTests } = await import("./settings.test.js");
+    results.push(["settings", runSettingsTests(m)]);
+  } catch (e) {
+    results.push(["settings", { passed: false, fails: [String(e)] }]);
+  }
   window.testResults = results;
   out.textContent = results.map(([n, r]) => `${n}: ${r.passed ? "PASS" : "FAIL " + r.fails.join("; ")}`).join("\n");
 </script>

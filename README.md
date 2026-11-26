@@ -11,7 +11,7 @@ ConnorIGL on YouTube. This is an independent rebuild for Bedrock. No code or ass
 Works on Windows, Xbox, PlayStation, Switch, mobile and Realms. **No experimental toggles needed.**
 Requires Minecraft Bedrock **1.21.90 or newer**.
 
-> **Status:** early development (v0.26.0). Every feature below is written, but none of it has been playtested
+> **Status:** early development (v0.27.0). Every feature below is written, but none of it has been playtested
 > in game yet, so expect bugs. Please report anything that shows up in the Content Log (Settings → Creator).
 
 ## How to play
@@ -52,6 +52,27 @@ game starts.
 | Line up the play area with zoomed-out maps | Moves the start point so one zoomed-out map covers the play area |
 
 To make someone an admin without operator permission, run `/tag <name> add hs_admin`.
+
+**Presets** (Game settings → Presets) set everything in one tap. You can still tweak them afterwards under
+Custom settings:
+
+| Preset | What it is |
+|---|---|
+| Classic | The original game: no morphs, one rotation, find the hider by sight or by hitting them |
+| Mob Morph / Block Morph / Mixed Morph | Classic, with hiders turning into a mob, a block, or their choice |
+| Extended | 3 rotations at new locations, the map station, maps lined up with the play area, and seekers must keep the hider in view for a second |
+| Solo Practice | Peaceful, one rotation, and the map station, for playing alone against bots |
+
+Saved settings are versioned. When the add-on updates, older or invalid settings are repaired automatically
+(for example, the removed Nether/End options just disappear).
+
+**Reference rules vs extensions.** The original Java mod (as seen in the videos) has: the build phase and
+lock-in, the four spot rules, the four question categories, the 5-card hand with time bonuses, Cancel and
+challenges, mob and block morphs, the blackout map and map teleporting, and a 1000×1000 arena. Everything
+else here is an addition for this Bedrock version: bots, rotations at new locations, round-robin asking,
+once-per-round questions, the height limit, water hiding, Peaceful, capture modes, the hider radar and
+locator bar, the sky outline and fill, the map station, the terrain scan, and the challenge timeout option.
+See [docs/parity.md](docs/parity.md) for the full breakdown.
 
 ### Morph mode
 
@@ -133,13 +154,16 @@ Offline seekers are skipped, and bots take their turns too.
 | Task | Draw 1, pick 1 | Launch a firework · Light a fire · Spawn a bee · Spawn a farm animal · Place gravel · Place sand · Drop the block you're standing on · Place the block I'm standing on |
 
 Tasks happen automatically right next to the hider, so they can't be skipped. Every answer is saved in the
-**Clues** log.
+**Clues** log, which also shows how much of the play area was still possible after each answer.
 
 ### Teleporting, radar and border
 
-- **Teleport (seekers):** from the menu, teleport to a teammate, to typed-in coordinates, or back to the
-  start point. You can do this once a minute, but not into ruled-out (dark) areas and not while a challenge
-  is running. Far-away chunks load in while you float down.
+- **Teleport (seekers):** from the menu, teleport to a teammate, to a **map square**, to typed-in
+  coordinates, or back to the start point. You can do this once a minute, but not into ruled-out (dark)
+  areas and not while a challenge is running. Far-away chunks load in while you float down.
+  - **Map squares** stand in for the Java mod's click-the-map teleport. The menu map has row letters on
+    the right (A is the north edge) and columns numbered 1–15 from the west edge. Pick a square like C7 and
+    you land in its middle, or the nearest spot in that square that isn't ruled out.
 - **Seeker radar (hider):** above the hotbar, the hider sees every seeker's direction (an arrow relative to
   where they're looking) and distance.
 - **Native locator bar, for the hider only:** the locator bar is on during games, and the hider wears a locked
@@ -265,7 +289,7 @@ The scripts use the stable Script API (`@minecraft/server` 2.0.0 and `@minecraft
 - `scripts/game.js`: game state, turns, scoring and found detection
 - `scripts/bots.js`: AI players for solo games
 - `scripts/disguise.js`: mob and block morphs
-- `scripts/settings.js`: admin game settings
+- `scripts/settings.js`, `settingsmodel.js`: admin game settings, presets and migration
 - `scripts/map.js`, `terrain.js`: the menu map and the background terrain scan
 - `scripts/skylines.js`: red sky lines that show the search area on real map items
 - `scripts/powerups.js`, `cards.js`, `challenges.js`: answers, hider cards, Cancel and challenges
@@ -287,8 +311,8 @@ The scripts use the stable Script API (`@minecraft/server` 2.0.0 and `@minecraft
 ### Automated tests
 
 The pure-JavaScript parts (search-area geometry in `geometry.js`, hand rules in `hand.js`, the fall and
-tool-break challenge trackers in `trackers.js`) have tests in `tests/`. With Node 18+:
-`node tests/geometry.test.js`, `node tests/hand.test.js`, `node tests/trackers.test.js`. Without Node, serve the
+tool-break challenge trackers in `trackers.js`, settings migration and presets in `settingsmodel.js`) have tests in `tests/`. With Node 18+:
+`node tests/geometry.test.js`, `node tests/hand.test.js`, `node tests/trackers.test.js`, `node tests/settings.test.js`. Without Node, serve the
 repo (`python -m http.server 8765 --bind 127.0.0.1`) and open `http://127.0.0.1:8765/tests/run.html`.
 Nothing that touches the Minecraft API can be tested outside the game.
 
@@ -327,7 +351,8 @@ owner has tried it and approved it. The full steps are in [CLAUDE.md](CLAUDE.md)
       teleport validation, safe morph world edits. See [docs/parity.md](docs/parity.md)
 - [x] Parity spec P1: attributed challenge detection, 3 new challenges, safe tasks, capture presets
 - [x] Parity spec P2: morph polish (no floating gear, safe decoys, moved-block capture, reconnect cleanup)
-- [ ] Parity spec P3–P4: presets, UI polish, more tests
+- [x] Parity spec P3: presets, settings migration, map-square teleport, clue log
+- [ ] Parity spec P4: release checks and the in-game test matrix
 
 See [docs/game-rules.md](docs/game-rules.md) for the full reference rules gathered from the videos.
 
