@@ -56,15 +56,37 @@ For each: confirm it completes when a seeker really does it, and does NOT comple
 
 - [ ] Fish: catch one (complete). *(Known: taking fish from a chest also counts.)*
 - [ ] Mud: water bottle on dirt (complete) / picking up mud from elsewhere (not).
-- [ ] Breed chickens: feed two chickens (complete) / a chick born far from any seeker (not).
+- [ ] Breed animals: feed two cows (complete) / a baby born far from any seeker (not).
 - [ ] Hatch a chicken: throw eggs until one hatches (complete).
 - [ ] Bonemeal: on a sapling that grows (complete) / on a block where nothing happens (not).
-- [ ] Iron golem: build one (complete) / a village golem spawning (not).
+- [ ] Create a golem: iron golem and snow golem (complete) / a village golem spawning (not).
 - [ ] TNT: light it with flint and steel (complete) / TNT lit by someone who isn't seeking (not).
 - [ ] Nether portal: build and light one (complete); walking through brings you back to the start point.
 - [ ] Fall 100: into water from 100+ blocks (complete) / dying from the fall (not) / teleporting (not).
 - [ ] Break an iron tool: wear one out (complete) / switching slots (not).
-- [ ] Bread: craft one (complete).
+- [ ] Break an iron tool also counts shears and flint and steel.
+- [ ] Dye: sheep, cat collar, wolf collar, sign (complete).
+- [ ] Glazed terracotta, written book: get one (complete).
+- [ ] Poison: eat a poisonous potato / spider eye (complete).
+- [ ] Mine diamonds: diamond ore and deepslate diamond ore (complete).
+- [ ] Share a boat: seeker + mob in one boat (complete) / two players (not).
+- [ ] Tame: wolf with bones, cat with fish (complete).
+- [ ] Touch bedrock: stand on it (complete).
+- [ ] Seeker dies mid-round: hider gets a draw 1, pick 1 offer.
+- [ ] Sounds play for: round start, seekers go, question asked, answer, cancel, challenge start/complete, time bonus, caught.
+
+## Questions board, tasks and time bonuses (v0.31.0)
+
+- [ ] Seeker uses the book: the Questions board opens with four headed sections and coloured tiles (icons load, not the pink/black missing texture).
+- [ ] Tapping a tile asks that question (the right one: check a tile late in the list, like Spawn a Rabbit).
+- [ ] Asked questions show a dimmed tile; tapping one says it was already asked.
+- [ ] More opens the old seeker menu (clues, map, teleport, options).
+- [ ] Task asked: hider gets the item, the hide timer stops, seekers can't ask. Doing it (place grass, spawn a cow, use a fire charge, fire a rocket, break a block) completes it and unpauses.
+- [ ] Task not done in 60 s: it happens automatically.
+- [ ] Mob-morph hider can hold the task item while the task runs.
+- [ ] Time bonus: hand → card → Play adds the minutes to the hider menu's time; an unplayed card adds nothing.
+- [ ] In block light: near a torch → Yes; in an unlit cave → No.
+- [ ] Nearest mob same type: both next to a cow → Yes.
 - [ ] While a challenge is active: no questions, no teleports. With only bot seekers, it completes by itself.
 - [ ] Peaceful: TNT and fishing never get dealt. No water in the play area: fishing and mud never get dealt.
 

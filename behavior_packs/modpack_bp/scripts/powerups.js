@@ -6,7 +6,7 @@
 // 3. The hider earns cards: draw N, pick M (per category). The hand never holds more than CONFIG.handSize
 //    cards: taking one into a full hand means discarding one in the same step (hand.js).
 // 4. Challenge cards stop all questions until a seeker completes the challenge.
-import { world, system } from "@minecraft/server";
+import { world, system, ItemStack } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 import { findQuestion } from "./questions.js";
 import { flatPos } from "./rules.js";
@@ -57,6 +57,7 @@ export function blockedReason() {
   const s = game.state;
   if (s.challenge) return `Challenge first: ${challengeById(s.challenge.id)?.name ?? "?"}`;
   if (s.pending) return "Waiting for the hider's answer...";
+  if (s.task) return "The hider is doing a task...";
   return undefined;
 }
 
@@ -88,6 +89,7 @@ export function ask(asker, questionId) {
   s.pending = pending;
   game.advanceAsker(); // round robin: the next seeker asks next
   game.broadcast(`${category.color}[${category.name}] §f${asker.name}: ${question.text}`);
+  game.sfx("ask");
 
   if (!hand().some((c) => c.type === "cancel")) {
     resolve(pending.token, false);
@@ -118,22 +120,134 @@ export function resolve(token, cancelled) {
     if (i >= 0) hand().splice(i, 1);
     s.clues.push({ by: p.by, text: p.text, answer: "Cancelled by the hider", qid: p.qid, from: p.from, cancelled: true });
     game.broadcast(`§c${hiderName} played Cancel! "${p.text}" gets no answer.`);
+    game.sfx("cancel");
     announce("§cCancelled!", `${hiderName} blocked: ${p.text}`);
     game.save();
     return;
   }
 
-  let answer = p.answer;
   if (question.perform) {
+    // Tasks: the hider does it themselves when they can (a person who isn't a block disguise); otherwise it
+    // happens automatically.
+    const person = hiderPlayer();
+    const blockDisguise = s.disguise?.applied && s.disguise.kind === "block";
+    if (question.hiderTask && person && !blockDisguise) return startHiderTask(p, question, person);
     const hider = game.hiderTarget();
-    answer = hider ? question.perform(hider, p.payload) : "The hider couldn't do it.";
+    return finishTask(p, hider ? question.perform(hider, p.payload) : "The hider couldn't do it.");
   }
+  s.clues.push({ by: p.by, text: p.text, answer: p.answer, qid: p.qid, from: p.from });
+  game.broadcast(`  §e→ ${p.answer}`);
+  announce(`§e${p.answer}`, `${p.by}: ${p.text}`);
+  game.sfx("answer");
+  offer(category.draw, category.pick);
+  game.save();
+}
+
+// ---------------------------------------------------------------------------
+// Tasks the hider performs
+// ---------------------------------------------------------------------------
+//
+// The hider gets the item they need and has CONFIG.taskSeconds to do it. Their hide timer is paused and no
+// questions can be asked until it's done. If time runs out it happens automatically.
+
+function startHiderTask(p, question, person) {
+  const s = game.state;
+  const spec = { ...question.hiderTask };
+  if (spec.fromPayload) spec.block = p.payload;
+  s.task = { ...p, spec, left: CONFIG.taskSeconds };
+  const give = spec.give ?? spec.block ?? spec.item;
+  if (give) {
+    try {
+      person.getComponent("minecraft:inventory")?.container?.addItem(new ItemStack(give, 1));
+    } catch {}
+  }
+  game.broadcast(`§c[Task] ${game.nameOf(game.hiderId())} must: ${question.text} §7(their hide timer is paused until it's done)`);
+  try {
+    person.onScreenDisplay.setTitle("§cYour task", {
+      subtitle: `${question.text} (${CONFIG.taskSeconds}s, your timer is paused)`,
+      fadeInDuration: 5,
+      stayDuration: 80,
+      fadeOutDuration: 10,
+    });
+  } catch {}
+  game.save();
+}
+
+/** Records a task as done (by the hider, or automatically) and hands out the powerups. */
+function finishTask(p, answer) {
+  const s = game.state;
+  s.task = null;
+  const found = findQuestion(p.qid);
   s.clues.push({ by: p.by, text: p.text, answer, qid: p.qid, from: p.from });
   game.broadcast(`  §e→ ${answer}`);
-  if (question.perform) announce("§cTask!", answer);
-  else announce(`§e${answer}`, `${p.by}: ${p.text}`);
+  announce("§cTask!", answer);
+  game.sfx("answer");
+  if (found) offer(found.category.draw, found.category.pick);
+  game.save();
+}
 
-  offer(category.draw, category.pick);
+function taskDone() {
+  const s = game.state;
+  const t = s.task;
+  if (!t) return;
+  const q = findQuestion(t.qid)?.question;
+  const did = q?.doneText ? q.doneText(t.spec.block) : "did the task";
+  finishTask(t, `${game.nameOf(game.hiderId())} ${did}`);
+}
+
+function isTaskHider(player) {
+  return !!game.state.task && isActiveHider(player);
+}
+
+/** The hider placed a block. */
+export function taskPlaced(player, block) {
+  const t = game.state.task;
+  if (isTaskHider(player) && t.spec.kind === "place" && block?.typeId === t.spec.block) taskDone();
+}
+
+/** The hider broke a block. */
+export function taskBroke(player) {
+  if (isTaskHider(player) && game.state.task.spec.kind === "break") taskDone();
+}
+
+/** The hider used an item (fire charge). */
+export function taskUsed(player, item) {
+  const t = game.state.task;
+  if (isTaskHider(player) && t.spec.kind === "use" && item?.typeId === t.spec.item) taskDone();
+}
+
+/** Something spawned: the task mob (or firework) near the hider counts. */
+export function taskSpawned(entity) {
+  const t = game.state.task;
+  if (!t || t.spec.kind !== "spawn" || entity?.typeId !== t.spec.mob) return;
+  const hider = hiderPlayer();
+  if (!hider) return;
+  try {
+    const a = entity.location;
+    const b = hider.location;
+    if (Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z) <= 10) taskDone();
+  } catch {}
+}
+
+/** A seeker died during the round: the hider gets a powerup (draw 1, pick 1), like the original. */
+export function seekerDied(name) {
+  if (game.state.phase !== "seeking") return;
+  game.broadcast(`§c${name} died! The hider gets a powerup.`);
+  offer(1, 1);
+  game.save();
+}
+
+/** The hider plays a time-bonus card: its minutes are added to their score from now on. */
+export function playTimeBonus(player, cardId) {
+  const s = game.state;
+  if (player ? !isActiveHider(player) : !game.isBotId(game.hiderId())) return;
+  const i = hand().findIndex((c) => c.id === cardId && c.type === "time");
+  if (i < 0) return;
+  const [card] = hand().splice(i, 1);
+  s.bonusTime = (s.bonusTime ?? 0) + card.minutes * 60;
+  game.broadcast(`§a${game.nameOf(game.hiderId())} played a Time Bonus: +${card.minutes} minutes!`);
+  announce("§aTime Bonus!", `+${card.minutes} minutes`);
+  game.sfx("timeBonus");
   game.save();
 }
 
@@ -199,6 +313,10 @@ export function autoFinish() {
   const s = game.state;
   handRules.autoFinish(hand(), s.offer, CONFIG.handSize, cards.cardValue);
   s.offer = null;
+  // Bot hiders play their time bonuses straight away.
+  if (game.isBotId(game.hiderId())) {
+    for (const c of hand().filter((x) => x.type === "time")) playTimeBonus(undefined, c.id);
+  }
   game.save();
 }
 
@@ -229,6 +347,7 @@ export function playChallenge(player, cardId) {
   game.broadcast(`§6${game.nameOf(game.hiderId())} played a challenge: §l${ch.name}§r§6! §7${ch.desc}`);
   game.broadcast("§7No questions and no teleporting until a seeker completes it.");
   announce("§6Challenge!", ch.name);
+  game.sfx("challenge");
   game.save();
 }
 
@@ -240,6 +359,7 @@ export function completeChallenge(byName) {
   s.challenge = null;
   game.broadcast(`§a${byName} completed the challenge${ch ? ` "${ch.name}"` : ""}! Questions are open again.`);
   announce("§aChallenge complete!", `${byName} did it`);
+  game.sfx("challengeDone");
   game.save();
 }
 
@@ -257,6 +377,14 @@ export function tickSecond() {
   const s = game.state;
 
   if (s.pending && --s.pending.left <= 0) resolve(s.pending.token, false);
+  // A task the hider hasn't done in time happens automatically.
+  if (s.task && --s.task.left <= 0) {
+    const t = s.task;
+    const q = findQuestion(t.qid)?.question;
+    const hider = game.hiderTarget();
+    game.tell(hiderPlayer() ?? { sendMessage() {} }, "§7Time's up: your task was done for you.");
+    finishTask(t, hider && q ? q.perform(hider, t.payload) : "The hider couldn't do it.");
+  }
 
   if (s.offer && ++s.offer.age > CONFIG.offerSeconds) {
     const p = hiderPlayer();

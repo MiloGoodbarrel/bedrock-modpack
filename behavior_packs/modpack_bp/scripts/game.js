@@ -108,6 +108,8 @@ function freshState(players = []) {
     challenge: null, // { id, left, baseline, botLeft } while seekers must complete a challenge
     usedChallenges: [], // challenge ids played this round (each once per round)
     dug: [], // "x,y,z" of blocks the hider dug out (or blew up) this round
+    task: null, // a task the hider is doing right now (their hide timer is paused meanwhile)
+    bonusTime: 0, // seconds added by time-bonus cards the hider played this round
     stationTurn: "", // roundKey() the map station was last set up for
     cycle: 0, // which rotation this is (0-based); each rotation happens at a new random location
     relocating: false, // between rotations: looking for the next location
@@ -371,8 +373,7 @@ export function currentScore() {
     hiderSeconds: state.hiderSeconds,
     overtime: state.overtime,
     penaltyPerSecond: CONFIG.overtimePenaltyPerSecond,
-    hand: state.hand,
-    handSize: CONFIG.handSize,
+    bonusSeconds: state.bonusTime ?? 0, // only time-bonus cards the hider has played count
   });
 }
 
@@ -622,6 +623,8 @@ function startTurn(turn) {
   state.challenge = null;
   state.usedChallenges = [];
   state.dug = []; // blocks the hider digs out this round (Open Spot rule)
+  state.task = null;
+  state.bonusTime = 0;
   state.tp = {};
   // Seekers take turns asking, in join order, starting with a different seeker each round.
   const seekers = state.players.map((p) => p.id).filter((pid) => pid !== state.order[turn]);
@@ -663,6 +666,7 @@ function startTurn(turn) {
   const rotations = state.rules?.rotations ?? 1;
   const rot = rotations > 1 ? ` · rotation ${(state.cycle ?? 0) + 1} of ${rotations}` : "";
   titleAll(`§e${nameOf(id)} is hiding`, `Round ${turn + 1} of ${state.order.length}${rot}`);
+  sfx("hiderAnnounced");
 }
 
 /** Identifies the current hider's round (game, rotation, turn); stale callbacks compare against it. */
@@ -694,6 +698,7 @@ export function lockIn(player) {
     );
   }
   titleAll("§cSeekers, go!", seekerHint() ?? `${player.name} has locked in their spot`);
+  sfx("hiding");
   return [];
 }
 
@@ -1235,10 +1240,51 @@ function enforceBorder() {
 
 export function onEntitySpawn(entity, cause) {
   watch.onSpawn(entity, cause);
+  powerups.taskSpawned(entity);
 }
 
 export function onUseOnBlock(player, block, item) {
   watch.onUseOnBlock(player, block, item);
+  powerups.taskUsed(player, item);
+}
+
+/** Item used in the air (fire charge, eggs...). */
+export function onItemUse(player, item) {
+  powerups.taskUsed(player, item);
+}
+
+/** A seeker dying gives the hider a powerup. */
+export function onEntityDie(entity) {
+  try {
+    if (entity?.typeId === "minecraft:player" && state.phase === "seeking" && isSeeker(entity)) powerups.seekerDied(entity.name);
+  } catch {}
+}
+
+// --- Sounds ---------------------------------------------------------------------------
+// Vanilla sounds for the big moments (the original mod has its own; these are stand-ins).
+const SOUNDS = {
+  hiderAnnounced: "raid.horn",
+  hiding: "note.pling",
+  ask: "note.chime",
+  answer: "random.orb",
+  cancel: "note.bass",
+  challenge: "random.anvil_use",
+  challengeDone: "random.levelup",
+  powerup: "random.pop",
+  timeBonus: "random.orb",
+  caught: "random.totem",
+};
+
+/** Plays one of the game's sounds to everyone in the game. */
+export function sfx(kind) {
+  const id = SOUNDS[kind];
+  if (!id) return;
+  for (const p of world.getAllPlayers()) {
+    if (!isJoined(p)) continue;
+    try {
+      p.playSound(id, { volume: kind === "hiderAnnounced" ? 0.5 : 1 });
+    } catch {}
+  }
 }
 
 // --- No unbreakable blocks for the hider ---------------------------------------------
@@ -1271,6 +1317,7 @@ export function beforeUseOnBlock(event) {
 
 /** Backup: if an unbreakable block still got placed by the hider, remove it again. */
 export function onPlaceBlock(player, block) {
+  powerups.taskPlaced(player, block);
   try {
     if (hiderRoundActive(player) && isUnbreakable(block?.typeId)) {
       block.setType("minecraft:air");
@@ -1307,6 +1354,7 @@ export function spotRuleOptions() {
 
 export function onBreakBlock(player, location) {
   if (hiderRoundActive(player)) noteDug(location.x, location.y, location.z);
+  powerups.taskBroke(player);
 }
 
 /** Any explosion during a round: the blocks it destroys count as dug (read-only, so safe in a before event). */
@@ -1357,6 +1405,7 @@ export function found(finder) {
   const who = finder ? `${finder.name} found ${nameOf(id)}` : `${nameOf(id)}'s round ended`;
   broadcast(`§6${who}! Hide time: ${fmt(score)}`);
   titleAll(`§6${who}!`, `Hide time: ${fmt(score)}`);
+  sfx("caught");
 
   if (state.turn + 1 < state.order.length) {
     state.phase = "between";
@@ -1673,7 +1722,7 @@ function tickSeeking() {
     for (const p of onlineSeekers()) actionBar(p, `§7Paused: ${nameOf(id)} is offline`);
     return;
   }
-  state.hiderSeconds++;
+  if (!state.task) state.hiderSeconds++; // paused while the hider is doing a task
   if (state.cooldown > 0) state.cooldown--;
   if (state.hiderSeconds % 10 === 0) save();
   setBoardScore(id, (state.scores[id] ?? 0) + currentScore()); // total so far, including earlier rotations
@@ -1771,7 +1820,7 @@ let gearWarned = 0; // tick of the last "your gear shows" warning
  */
 function guardDisguise(hider) {
   const d = state.disguise;
-  if (d.kind === "mob" && !isBotId(hiderId()) && disguise.showsGear(hider)) {
+  if (d.kind === "mob" && !isBotId(hiderId()) && !state.task && disguise.showsGear(hider)) {
     disguise.stripVisibleGear(hider);
     disguise.emptyHands(hider);
     if (disguise.showsGear(hider) && system.currentTick - gearWarned > 200) {

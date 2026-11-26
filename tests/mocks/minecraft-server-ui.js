@@ -24,6 +24,15 @@ class Form {
   textField() {
     return this;
   }
+  header() {
+    return this;
+  }
+  divider() {
+    return this;
+  }
+  label() {
+    return this;
+  }
   submitButton() {
     return this;
   }

@@ -15,6 +15,7 @@ world.afterEvents.entityHitBlock.subscribe((event) => {
 });
 world.beforeEvents.explosion?.subscribe((event) => game.beforeExplosion(event)); // blown-up blocks count as dug
 world.afterEvents.playerBreakBlock.subscribe((event) => {
+  watch.onBreak(event.player, event.brokenBlockPermutation); // mine-diamonds challenge
   game.onBreakBlock(event.player, event.block.location); // dug-out blocks (Open Spot rule)
   game.onBlockHit(event.player, event.block.location, event.block.dimension);
 });
@@ -40,6 +41,9 @@ world.afterEvents.playerInteractWithEntity?.subscribe((event) => {
   watch.onInteractEntity(event.player, event.target, event.beforeItemStack ?? event.itemStack);
 });
 
+// A seeker dying gives the hider a powerup.
+world.afterEvents.entityDie.subscribe((event) => game.onEntityDie(event.deadEntity));
+
 // Bot entities left behind in chunks that were unloaded get cleaned up when they load again.
 world.afterEvents.entityLoad?.subscribe((event) => bots.onEntityLoad(event.entity));
 
@@ -58,6 +62,7 @@ world.afterEvents.playerSpawn.subscribe((event) => {
 
 world.afterEvents.itemUse.subscribe((event) => {
   watch.onItemUse(event.source, event.itemStack); // eggs, for the hatch-a-chicken challenge
+  game.onItemUse(event.source, event.itemStack); // fire charge / firework tasks
   if (event.itemStack?.typeId !== game.MENU_ITEM) return;
   const player = event.source;
   system.run(() => openMenu(player));

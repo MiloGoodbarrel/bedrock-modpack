@@ -21,10 +21,10 @@ export function fallStep(track, sample, need = 100, maxStepH = 30, maxRise = 10)
   return { track: { peak: Math.max(track.peak, sample.y), last: sample }, landed: false, drop: 0 };
 }
 
-const IRON_TOOL = /^minecraft:iron_(pickaxe|axe|shovel|hoe|sword)$/;
+const IRON_TOOL = /^minecraft:(iron_(pickaxe|axe|shovel|hoe|sword)|shears|flint_and_steel)$/;
 
 /**
- * "Break an iron tool": compares the held item now with the previous sample.
+ * "Break an iron tool" (iron tools, shears, flint and steel): compares the held item now with the previous sample.
  *   prev / now: { slot, type, remaining }  (type undefined for an empty hand; remaining = durability left)
  * True when an iron tool that was about to break (remaining <= `nearlyBroken`) vanished from the same,
  * still-selected slot. Switching slots never counts. Dropping a nearly broken tool on purpose would also

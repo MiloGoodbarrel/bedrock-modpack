@@ -1,12 +1,11 @@
 // Score rules as pure functions (no Minecraft imports), so they can be tested outside the game.
-import { bonusSeconds } from "./hand.js";
 
 /**
  * A hider's score for their current round: seconds hidden, minus the overtime penalty, plus the time-bonus
- * cards in their hand (at most `handSize` cards ever count). Never below 0.
+ * cards they've played this round (cards still in the hand don't count, like the original). Never below 0.
  */
-export function roundScore({ hiderSeconds, overtime, penaltyPerSecond, hand, handSize }) {
-  return Math.max(0, hiderSeconds - overtime * penaltyPerSecond + bonusSeconds(hand, handSize));
+export function roundScore({ hiderSeconds, overtime, penaltyPerSecond, bonusSeconds = 0 }) {
+  return Math.max(0, hiderSeconds - overtime * penaltyPerSecond + bonusSeconds);
 }
 
 /** Final standings: [{ name, seconds }] sorted best first (ties keep join order). */

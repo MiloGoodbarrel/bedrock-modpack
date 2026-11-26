@@ -5,6 +5,10 @@
 //   bonemeal / turnsInto / portal: the block a seeker used an item on must actually change (plant grew,
 //                                 dirt became mud, a portal appeared)
 //   fall / toolBreak:             tracked per seeker (trackers.js)
+//   dye:                          a seeker uses a dye on a sheep / cat / wolf, or on a sign
+//   mined:                        a seeker breaks one of the listed blocks (diamond ore)
+//   effect / boat / tame / bedrock: checked on each seeker every second (poisoned, in a boat with a mob,
+//                                 has tamed an animal that wasn't tamed before, standing on bedrock)
 //   items:                        an inventory count going up (can't be attributed: chests or teammates count)
 import { world, system } from "@minecraft/server";
 import { itemCount } from "./challenges.js";
@@ -12,14 +16,9 @@ import { fallStep, toolBroke } from "./trackers.js";
 import * as game from "./game.js";
 import * as powerups from "./powerups.js";
 
-const SEEDS = new Set([
-  "minecraft:wheat_seeds",
-  "minecraft:beetroot_seeds",
-  "minecraft:melon_seeds",
-  "minecraft:pumpkin_seeds",
-  "minecraft:torchflower_seeds",
-  "minecraft:pitcher_pod",
-]);
+const DYE = /_dye$|^minecraft:(ink_sac|glow_ink_sac|cocoa_beans|lapis_lazuli|bone_meal)$/;
+const DYEABLE_MOBS = new Set(["minecraft:sheep", "minecraft:cat", "minecraft:wolf"]);
+const TAMEABLE_AGE = 20 * 20; // an animal a seeker interacted with is watched this long for becoming tamed
 const IGNITERS = new Set(["minecraft:flint_and_steel", "minecraft:fire_charge"]);
 const PUMPKINS = new Set(["minecraft:carved_pumpkin", "minecraft:lit_pumpkin"]);
 
@@ -27,6 +26,7 @@ const recent = new Map(); // player id -> { fed, egg, pumpkin, ignite: { tick, l
 const snapshots = new Map(); // player id -> { loc, dim, before } taken just before using an item on a block
 let falls = new Map();
 let tools = new Map();
+let tameWatch = new Map(); // entity id -> { player id, until tick, wasTamed }
 let watching = ""; // challenge id the trackers were reset for
 
 function active() {
@@ -36,6 +36,7 @@ function active() {
     watching = key;
     falls = new Map();
     tools = new Map();
+    tameWatch = new Map();
     recent.clear();
     snapshots.clear();
   }
@@ -94,10 +95,11 @@ export function onSpawn(entity, cause) {
     return;
   }
   let who;
-  if (ch.detect === "bred" && entity.typeId === ch.mob && cause === "Born") who = whoDid("fed", loc, dimId, 90 * 20, 16);
+  if (ch.detect === "bred" && cause === "Born") who = whoDid("fed", loc, dimId, 90 * 20, 16); // any animal
   else if (ch.detect === "hatched" && entity.typeId === "minecraft:chicken" && cause !== "Born" && isBaby(entity))
     who = whoDid("egg", loc, dimId, 10 * 20, 32);
-  else if (ch.detect === "golem" && entity.typeId === "minecraft:iron_golem") who = whoDid("pumpkin", loc, dimId, 5 * 20, 6);
+  else if (ch.detect === "golem" && (entity.typeId === "minecraft:iron_golem" || entity.typeId === "minecraft:snow_golem"))
+    who = whoDid("pumpkin", loc, dimId, 5 * 20, 6);
   else if (ch.detect === "tnt" && entity.typeId === "minecraft:tnt") who = whoDid("ignite", loc, dimId, 5 * 20, 4);
   if (who) complete(who.name);
 }
@@ -109,7 +111,30 @@ export function onPlace(player, block) {
 
 export function onInteractEntity(player, target, item) {
   if (!game.isSeeker(player) || !target) return;
-  if (target.typeId === "minecraft:chicken" && SEEDS.has(item?.typeId)) note(player, "fed", target.location);
+  const ch = active();
+  // Feeding any animal (holding an item while interacting): a baby born nearby soon after counts as bred.
+  if (item) note(player, "fed", target.location);
+  if (ch?.detect === "dye" && DYE.test(item?.typeId ?? "") && DYEABLE_MOBS.has(target.typeId)) return complete(player.name);
+  // Taming takes a few tries (or riding, for horses): watch this animal for a while.
+  if (ch?.detect === "tame") {
+    let tamed = false;
+    try {
+      tamed = !!target.getComponent("minecraft:tameable")?.isTamed;
+    } catch {}
+    if (!tameWatch.has(target.id)) tameWatch.set(target.id, { player: player.id, wasTamed: tamed });
+    tameWatch.get(target.id).until = system.currentTick + TAMEABLE_AGE;
+  }
+}
+
+/** A seeker broke a block (mine diamonds). */
+export function onBreak(player, brokenPermutation) {
+  const ch = active();
+  if (!ch || ch.detect !== "mined" || !game.isSeeker(player)) return;
+  let type;
+  try {
+    type = brokenPermutation?.type?.id;
+  } catch {}
+  if (ch.blocks.includes(type)) complete(player.name);
 }
 
 export function onItemUse(player, item) {
@@ -121,6 +146,10 @@ export function beforeUseOnBlock(player, block, item) {
   const ch = active();
   if (!ch || !game.isSeeker(player) || !block) return;
   if (ch.detect === "tnt" && block.typeId === "minecraft:tnt" && IGNITERS.has(item?.typeId)) note(player, "ignite", block.location);
+  if (ch.detect === "dye" && /sign/.test(block.typeId) && DYE.test(item?.typeId ?? "")) {
+    system.run(() => complete(player.name)); // dyeing a sign's text
+    return;
+  }
   if (ch.detect === "bonemeal" || ch.detect === "turnsInto") {
     let above;
     try {
@@ -206,11 +235,51 @@ export function tickFast() {
 export function tickSecond() {
   const ch = active();
   const s = game.state;
-  if (!ch || ch.detect !== "items" || !s.challenge) return;
+  if (!ch || !s.challenge) return;
   for (const p of world.getAllPlayers()) {
     if (!game.isSeeker(p)) continue;
-    const have = itemCount(p, ch.items);
-    if (s.challenge.baseline[p.id] === undefined) s.challenge.baseline[p.id] = have;
-    else if (have > s.challenge.baseline[p.id]) return complete(p.name);
+    try {
+      if (ch.detect === "items") {
+        const have = itemCount(p, ch.items);
+        if (s.challenge.baseline[p.id] === undefined) s.challenge.baseline[p.id] = have;
+        else if (have > s.challenge.baseline[p.id]) return complete(p.name);
+      } else if (ch.detect === "effect") {
+        if (p.getEffect(ch.effect)) return complete(p.name);
+      } else if (ch.detect === "bedrock") {
+        const l = p.location;
+        const under = p.dimension.getBlock({ x: Math.floor(l.x), y: Math.floor(l.y - 0.01), z: Math.floor(l.z) });
+        if (under?.typeId === "minecraft:bedrock") return complete(p.name);
+      } else if (ch.detect === "boat") {
+        const boat = p.getComponent("minecraft:riding")?.entityRidingOn;
+        if (boat && /boat/.test(boat.typeId)) {
+          const riders = boat.getComponent("minecraft:rideable")?.getRiders() ?? [];
+          if (riders.some((r) => r.typeId !== "minecraft:player")) return complete(p.name);
+        }
+      } else if (ch.detect === "tame") {
+        // Horses and the like are tamed by riding them: watch whatever the seeker is riding too.
+        const mount = p.getComponent("minecraft:riding")?.entityRidingOn;
+        if (mount?.getComponent("minecraft:tameable") && !tameWatch.has(mount.id)) {
+          tameWatch.set(mount.id, { player: p.id, wasTamed: !!mount.getComponent("minecraft:tameable").isTamed });
+        }
+        if (mount && tameWatch.has(mount.id)) tameWatch.get(mount.id).until = system.currentTick + TAMEABLE_AGE;
+      }
+    } catch {}
+  }
+  if (ch.detect === "tame") {
+    // An animal a seeker was working on is now tamed to that seeker, and wasn't before.
+    for (const [id, w] of tameWatch) {
+      if (system.currentTick > w.until) {
+        tameWatch.delete(id);
+        continue;
+      }
+      try {
+        const e = world.getEntity(id);
+        const t = e?.getComponent("minecraft:tameable");
+        if (t?.isTamed && !w.wasTamed && t.tamedToPlayerId === w.player) {
+          const p = world.getAllPlayers().find((pl) => pl.id === w.player);
+          return complete(p?.name ?? "A seeker");
+        }
+      } catch {}
+    }
   }
 }

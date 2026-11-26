@@ -171,9 +171,16 @@ export function runRulesTests({ rules, questions, scoring, cards, mc }) {
     const partly = mc.makeDimension({ blocks: { "0,63,0": "minecraft:stone" }, unloaded: (x) => x > 2 });
     const h2 = mc.makePlayer({ dimension: partly });
     check("unloaded area answers Unknown, not No", q("water_near").answer(h2, h2).startsWith("Unknown"));
-    check("standing on stone: not grass", q("on_grass").answer(hider, hider) === "No");
-    const g = mc.makePlayer({ dimension: floor({ "0,63,0": "minecraft:grass_block" }) });
-    check("standing on grass: yes", q("on_grass").answer(g, g) === "Yes");
+    check("lava 4 away counts as nearby", q("lava_near").answer(mc.makePlayer({ dimension: floor({ "4,64,0": "minecraft:lava" }) }), hider) === "Yes" ||
+      q("lava_near").answer(hider, mc.makePlayer({ dimension: floor({ "4,64,0": "minecraft:lava" }) })) === "Yes");
+    check("lava 5 away is not nearby", q("lava_near").answer(hider, mc.makePlayer({ dimension: floor({ "5,64,0": "minecraft:lava" }) })) === "No");
+    // Light from a block: a torch 3 blocks away lights the hider; nothing nearby doesn't.
+    check("torch nearby: in block light", q("block_light").answer(hider, mc.makePlayer({ dimension: floor({ "3,64,0": "minecraft:torch" }) })) === "Yes");
+    check("no light source: not in block light", q("block_light").answer(hider, hider) === "No");
+    // Same type of block underfoot.
+    const onGrass = mc.makePlayer({ dimension: floor({ "0,63,0": "minecraft:grass_block" }) });
+    check("same block: both on stone", q("same_block").answer(hider, hider).startsWith("Yes"));
+    check("same block: stone vs grass", q("same_block").answer(hider, onGrass).startsWith("No"));
   }
 
   // --- Task placement never overwrites blocks ---
@@ -183,7 +190,7 @@ export function runRulesTests({ rules, questions, scoring, cards, mc }) {
     const msg = q("task_gravel").perform(hider);
     let placed = 0;
     for (let x = -3; x <= 3; x++) for (let y = 63; y <= 66; y++) for (let z = -3; z <= 3; z++) if (dim.typeAt(x, y, z) === "minecraft:gravel") placed++;
-    check("gravel task places exactly one block", placed === 1 && msg.includes("placed"));
+    check("gravel task places exactly one block", placed === 1 && msg.includes("gravel"));
     check("gravel task didn't replace the floor", dim.typeAt(0, 63, 0) === "minecraft:stone");
     check("bee task spawns a bee", q("task_bee").perform(hider).includes("bee") && dim.spawned.some((e) => e.typeId === "minecraft:bee"));
     const drop = q("task_drop_floor").perform(hider);
@@ -192,13 +199,10 @@ export function runRulesTests({ rules, questions, scoring, cards, mc }) {
 
   // --- Scoring ---
   {
-    const time = (m) => ({ type: "time", minutes: m });
-    check("plain score", scoring.roundScore({ hiderSeconds: 300, overtime: 0, penaltyPerSecond: 60, hand: [], handSize: 5 }) === 300);
-    check("overtime penalty", scoring.roundScore({ hiderSeconds: 300, overtime: 2, penaltyPerSecond: 60, hand: [], handSize: 5 }) === 180);
-    check("never negative", scoring.roundScore({ hiderSeconds: 10, overtime: 10, penaltyPerSecond: 60, hand: [], handSize: 5 }) === 0);
-    check("time cards add up", scoring.roundScore({ hiderSeconds: 0, overtime: 0, penaltyPerSecond: 60, hand: [time(3), time(10)], handSize: 5 }) === 780);
-    const six = [time(3), time(3), time(3), time(3), time(3), time(10)];
-    check("a sixth card never counts", scoring.roundScore({ hiderSeconds: 0, overtime: 0, penaltyPerSecond: 60, hand: six, handSize: 5 }) === 900);
+    check("plain score", scoring.roundScore({ hiderSeconds: 300, overtime: 0, penaltyPerSecond: 60 }) === 300);
+    check("overtime penalty", scoring.roundScore({ hiderSeconds: 300, overtime: 2, penaltyPerSecond: 60 }) === 180);
+    check("never negative", scoring.roundScore({ hiderSeconds: 10, overtime: 10, penaltyPerSecond: 60 }) === 0);
+    check("played time bonuses add", scoring.roundScore({ hiderSeconds: 0, overtime: 0, penaltyPerSecond: 60, bonusSeconds: 780 }) === 780);
     const r = scoring.rankings([{ id: "a", name: "A" }, { id: "b", name: "B" }, { id: "c", name: "C" }], { a: 100, b: 300, c: 100 });
     check("rankings sorted, ties keep join order", r.map((x) => x.name).join() === "B,A,C");
   }
