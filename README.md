@@ -11,7 +11,7 @@ ConnorIGL on YouTube. This is an independent rebuild for Bedrock. No code or ass
 Works on Windows, Xbox, PlayStation, Switch, mobile and Realms. **No experimental toggles needed.**
 Requires Minecraft Bedrock **1.21.90 or newer**.
 
-> **Status:** early development (v0.30.2). Every feature below is written, but none of it has been playtested
+> **Status:** early development (v0.31.0). Every feature below is written, but none of it has been playtested
 > in game yet, so expect bugs. Please report anything that shows up in the Content Log (Settings → Creator).
 
 ## How to play
@@ -155,7 +155,10 @@ and the highest total wins. The menu map and the map station move with the start
 
 ### Questions
 
-Seekers ask from the **question board** (menu → Questions), with a 1-minute cooldown between questions.
+Seekers ask from the **Questions board**, which opens as soon as a seeker uses the game book. It's laid out like
+the original's Questions tab: one section per category with its reward, and a coloured tile per question
+(purple Comparing, blue Distance, green Observation, yellow Task). **More** at the bottom opens clues, map,
+teleport and options. There's a 1-minute cooldown between questions.
 **Each question and each task can be asked only once per hider's round.** Asked ones are greyed out. Each
 challenge can also be played only once per round.
 
@@ -166,12 +169,14 @@ Offline seekers are skipped, and bots take their turns too.
 
 | Category | Hider earns | Questions |
 |---|---|---|
-| Comparing | Draw 3, pick 2 | North or south of me? · East or west of me? · Above or below me? · Same biome? |
+| Comparing | Draw 3, pick 2 | North or south of me? · East or west of me? · Above or below me? · Same biome? · Standing on the same type of block as me? · Are our nearest mobs the same type? |
 | Distance | Draw 2, pick 2 | Within 500 / 250 / 100 / 50 / 25 blocks of me? (horizontal distance) |
-| Observation | Draw 2, pick 1 | Standing on grass? · On leaves? · On the same block as me? · Water within 4? · Lava within 6? · Snow within 4? · Flowers within 4? · Mobs within 16? · Open sky above you? |
-| Task | Draw 1, pick 1 | Launch a firework · Light a fire · Spawn a bee · Spawn a farm animal · Place gravel · Place sand · Drop the block you're standing on · Place the block I'm standing on |
+| Observation | Draw 2, pick 1 | In light from a block? *(estimated from light sources nearby; the API has no light level)* · On leaves? · Water within 4? · Lava within 4? · Snow within 4? · Flowers within 4? · Sky visible? |
+| Task | Draw 1, pick 1 | Break a block · Place grass / gravel / sand / stone · Spawn a bee / chicken / cow / pig / rabbit · Use a fire charge · Use a firework rocket · *(extras)* Drop the block you're standing on · Place the block I'm standing on |
 
-Tasks happen automatically right next to the hider, so they can't be skipped. Every answer is saved in the
+**The hider does tasks themselves:** they get the item, and **their hide timer is paused and no questions can be
+asked until it's done**. If they haven't done it after 60 seconds, it happens automatically next to them. Block
+disguises and bots always have it done automatically. Every answer is saved in the
 **Clues** log, which also shows how much of the play area was still possible after each answer.
 
 ### Teleporting, radar and border
@@ -198,7 +203,9 @@ Tasks happen automatically right next to the hider, so they can't be skipped. Ev
 Every question earns the hider cards. They pick from a "Pick N Powerups" screen, can hold 5 cards, and must
 discard any extras.
 
-- **Time Bonus (3 / 5 / 10 min):** added to the hider's time while the card is in their hand.
+- **Time Bonus (3 / 5 / 10 min):** the hider **plays** it from their hand (Your hand → the card → Play) to add
+  the time. Unplayed ones are lost when the hider is found. Bot hiders play theirs straight away.
+- **Seeker deaths:** whenever a seeker dies during the round, the hider gets a powerup (draw 1, pick 1).
 - **Cancel:** when a question is asked, a hider holding Cancel gets 10 seconds to block it. The seekers get
   no answer, and the hider earns nothing for that question.
 - **Challenge:** stops all questions until a seeker completes it. **No questions can be asked (and nobody
@@ -211,15 +218,22 @@ discard any extras.
 |---|---|
 | Catch a fish | A seeker's raw fish count goes up *(can't tell fishing apart from a chest or a teammate)* |
 | Make mud | A block a seeker pours a water bottle on actually turns into mud |
-| Breed chickens | A chick is born near a seeker who fed a chicken in the last 90 seconds |
+| Breed animals | A baby animal is born near a seeker who fed an animal in the last 90 seconds |
 | Hatch a chicken | A baby chicken appears near a seeker who threw an egg in the last 10 seconds |
 | Bonemeal a plant | A seeker uses bone meal and the plant really grows (or grass sprouts) |
-| Build an iron golem | A golem appears where a seeker just placed a carved pumpkin |
+| Create a golem | An iron or snow golem appears where a seeker just placed a carved pumpkin |
 | Ignite TNT | TNT a seeker lit with flint and steel or a fire charge goes off |
 | Light a Nether portal | A portal appears where a seeker used flint and steel or a fire charge (don't go through: Overworld only) |
 | Fall 100 blocks and survive | A seeker drops 100+ blocks in one fall and is still alive a second later (teleports don't count) |
-| Break an iron tool | An iron tool that was about to break disappears from the seeker's hand *(dropping it at that moment would also count)* |
-| Bake bread | A seeker's bread count goes up *(can't be attributed, like fish)* |
+| Break an iron tool | An iron tool, shears or flint and steel that was about to break disappears from the seeker's hand *(dropping it at that moment would also count)* |
+| Dye something | A seeker uses dye on a sheep, cat, wolf or sign |
+| Get glazed terracotta | A seeker has glazed terracotta *(inventory, like fish)* |
+| Get poisoned | A seeker has the Poison effect |
+| Mine diamonds | A seeker breaks diamond ore |
+| Share a boat with a mob | A seeker is in a boat with a mob riding too |
+| Tame an animal | An animal a seeker was feeding becomes tamed to them |
+| Touch bedrock | A seeker stands on bedrock |
+| Write a book | A seeker has a signed (written) book *(inventory)* |
 
 Challenges are only dealt if they're attainable. In Peaceful, TNT (gunpowder comes from creepers) and fishing
 (a rod needs string, which realistically comes from spiders) are left out. Fishing and mud are also left out

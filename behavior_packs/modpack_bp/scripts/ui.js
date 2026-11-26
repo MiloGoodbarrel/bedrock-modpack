@@ -78,7 +78,7 @@ async function confirm(player, title, body) {
 
 const back = (player) => ["Back", () => openMenu(player), ICON.back];
 
-export async function openMenu(player) {
+export async function openMenu(player, home = false) {
   const s = game.state;
   switch (s.phase) {
     case "lobby":
@@ -87,7 +87,8 @@ export async function openMenu(player) {
       return game.isHider(player) ? hiderBuildMenu(player) : waitingMenu(player);
     case "seeking":
       if (game.isHider(player)) return hiderSeekingMenu(player);
-      return game.isSeeker(player) ? seekerMenu(player) : spectatorMenu(player);
+      if (!game.isSeeker(player)) return spectatorMenu(player);
+      return home ? seekerMenu(player) : boardMenu(player);
     case "between":
       return menu(player, "Extreme Hide & Seek", "Next round is about to start...", [["Close", () => {}]]);
     case "ended":
@@ -512,47 +513,53 @@ async function teleportCoordsMenu(player) {
   game.teleportTo(player, Math.floor(x), Math.floor(z));
 }
 
-/** The question board: one row per category with what's left and what the hider earns. */
-function boardMenu(player, preview = false) {
+/**
+ * The Questions board, like the original's Questions tab: every category on one page (Comparing, Distance,
+ * Observation, Task), each with its reward and a coloured tile per question. Questions already asked this
+ * round show a dimmed tile. Tapping a tile asks it.
+ */
+async function boardMenu(player, preview = false) {
   const s = game.state;
   const blocked = preview ? "Questions open once the hider locks in." : game.canAsk(player);
-  const body =
-    (blocked ? `§c${blocked}§r\n` : "§aPick a category.§r\n") +
-    "Answers are about where YOU are standing.\n" +
-    "Every question earns the hider powerups. §7Each question and task can be asked once per round.§r";
-  const buttons = CATEGORIES.map((cat) => {
+  const form = new ActionFormData()
+    .title("Questions")
+    .body(
+      (blocked ? `§c${blocked}§r\n` : "§aTap a question to ask it.§r\n") +
+        "§7Answers are about where YOU are standing. Each one earns the hider powerups and can be asked once per round.§r"
+    );
+  const handlers = [];
+  for (const cat of CATEGORIES) {
     const qs = availableQuestions(cat);
     const left = qs.filter((q) => !s.used.includes(q.id)).length;
-    return [
-      `${cat.color}§l${cat.name}§r §8${left}/${qs.length} left\n§8Hider: ${cat.reward}`,
-      () => categoryMenu(player, cat, preview),
-      cat.icon,
-    ];
-  });
-  buttons.push(back(player));
-  return menu(player, "Question board", body, buttons);
-}
-
-function categoryMenu(player, category, preview = false) {
-  const s = game.state;
-  const blocked = preview ? "Questions open once the hider locks in." : game.canAsk(player);
-  const buttons = availableQuestions(category).map((q) => {
-    const used = s.used.includes(q.id);
-    const label = used ? `§8${q.text}\n§8✔ already asked this round` : `${q.text}`;
-    return [
-      label,
-      async () => {
-        if (preview || used) return categoryMenu(player, category, preview);
+    form.divider();
+    form.header(`${cat.color}${cat.name}§r  §7${cat.reward} · ${left}/${qs.length} left`);
+    for (const q of qs) {
+      const used = s.used.includes(q.id);
+      form.button(used ? `§8${q.text}` : q.text, questionIcon(q.id, used));
+      handlers.push(async () => {
+        if (preview) return boardMenu(player, preview);
+        if (used) {
+          player.sendMessage("§7That one was already asked this round.");
+          return boardMenu(player, preview);
+        }
         const now = game.canAsk(player);
         if (now) return player.sendMessage(`§c${now}`);
         game.ask(player, q.id);
-      },
-      category.icon,
-    ];
-  });
-  buttons.push(["Back", () => boardMenu(player, preview), ICON.back]);
-  const body = `${category.color}§l${category.name}§r  §7Hider: ${category.reward}§r\n` + (blocked ? `§c${blocked}§r` : "§aReady to ask.§r");
-  return menu(player, category.name, body, buttons);
+      });
+    }
+  }
+  form.divider();
+  form.button(preview ? "Back" : "§lMore§r\n§8clues · map · teleport · options", preview ? ICON.back : ICON.options);
+  handlers.push(() => openMenu(player, true));
+  const res = await show(form, player);
+  // selection counts buttons only (not headers or dividers).
+  if (!res || res.canceled || res.selection === undefined) return;
+  await handlers[res.selection]?.();
+}
+
+/** Tile icon for a question (made by tools/make_question_icons.py); dimmed once it's been asked. */
+function questionIcon(id, used) {
+  return `textures/ui/hs_questions/${id}${used ? "_used" : ""}`;
 }
 
 function spectatorMenu(player) {
